@@ -1,0 +1,25 @@
+{
+  "name": "Block Jumper: Mum Koşusu",
+  "short_name": "Block Jumper",
+  "description": "Canlı borsa mumlarında zıpla, dolar topla, $COIN kazan. Finans arcade runner.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b0f19",
+  "theme_color": "#0b0f19",
+  "categories": ["games", "finance", "arcade"],
+  "icons": [
+    {
+      "src": "/characters/portrait-0.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/characters/portrait-0.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
