@@ -63,6 +63,64 @@ class SoundEngine {
     osc.stop(t + 0.15);
   }
 
+  // Double Jump: uplifting dual-tone whoosh
+  public doubleJump() {
+    if (this.isMuted) return;
+    const ctx = this.initCtx();
+    if (!ctx) return;
+
+    const t = ctx.currentTime;
+    const osc1 = ctx.createOscillator();
+    const osc2 = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc1.type = "sine";
+    osc2.type = "triangle";
+
+    osc1.frequency.setValueAtTime(420, t);
+    osc1.frequency.exponentialRampToValueAtTime(840, t + 0.15);
+
+    osc2.frequency.setValueAtTime(630, t);
+    osc2.frequency.exponentialRampToValueAtTime(1260, t + 0.15);
+
+    gain.gain.setValueAtTime(0.18, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+
+    osc1.connect(gain);
+    osc2.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc1.start(t);
+    osc2.start(t);
+    osc1.stop(t + 0.19);
+    osc2.stop(t + 0.19);
+  }
+
+  // Frenzy / All-Time-High fanfare
+  public frenzy() {
+    if (this.isMuted) return;
+    const ctx = this.initCtx();
+    if (!ctx) return;
+
+    const t = ctx.currentTime;
+    [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
+      if (!ctx) return;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(freq, t + i * 0.05);
+
+      gain.gain.setValueAtTime(0.14, t + i * 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + i * 0.05 + 0.25);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(t + i * 0.05);
+      osc.stop(t + i * 0.05 + 0.26);
+    });
+  }
+
   // Coin / Dollar pickup: crisp crystal ding
   public coin() {
     if (this.isMuted) return;

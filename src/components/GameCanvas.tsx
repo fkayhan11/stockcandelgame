@@ -133,6 +133,8 @@ export function GameCanvas() {
     rocketTimer: 0,
     coyoteTimer: 0,
     jumpBufferTimer: 0,
+    screenShake: 0,
+    ambientDust: [] as { x: number; y: number; speed: number; size: number; alpha: number }[],
     player: {
       x: 80,
       y: 0,
@@ -144,6 +146,10 @@ export function GameCanvas() {
       facing: 1,
       animation: "bekle" as PlayerAnimation,
       runClock: 0,
+      canDoubleJump: true,
+      jumpSpin: 0,
+      squashX: 1,
+      squashY: 1,
     },
     input: { left: false, right: false, jump: false, jumpPressed: false },
     platforms: [] as Platform[],
@@ -373,8 +379,13 @@ export function GameCanvas() {
     state.player.vy = 0;
     state.player.onGround = true;
     state.player.animation = "bekle";
+    state.player.canDoubleJump = true;
+    state.player.jumpSpin = 0;
+    state.player.squashX = 1;
+    state.player.squashY = 1;
     state.coyoteTimer = 0.14;
     state.jumpBufferTimer = 0;
+    state.screenShake = 0;
     state.cameraX = 0;
     state.distance = 0;
     state.dollars = 0;
@@ -393,6 +404,15 @@ export function GameCanvas() {
     state.elapsedMs = 0;
     state.jumpPower = -560 * tf.jumpBoost;
     setIsPaused(false);
+
+    // Ambient floating market embers/dust
+    state.ambientDust = Array.from({ length: 32 }, (_, i) => ({
+      x: i * 75 + Math.random() * 40,
+      y: 40 + Math.random() * 380,
+      speed: 12 + Math.random() * 18,
+      size: 1.5 + Math.random() * 2,
+      alpha: 0.18 + Math.random() * 0.35,
+    }));
 
     // Ambient background volume bars for depth
     state.bgBars = Array.from({ length: 42 }, (_, i) => ({
@@ -473,6 +493,7 @@ export function GameCanvas() {
     // Coyote time tracking
     if (player.onGround) {
       state.coyoteTimer = 0.14;
+      player.canDoubleJump = true;
     } else {
       state.coyoteTimer = Math.max(0, state.coyoteTimer - dt);
     }
@@ -482,6 +503,25 @@ export function GameCanvas() {
       state.jumpBufferTimer = 0.14;
     }
     state.jumpBufferTimer = Math.max(0, state.jumpBufferTimer - dt);
+
+    // Smooth squash & stretch decay
+    player.squashX += (1 - player.squashX) * Math.min(1, 14 * dt);
+    player.squashY += (1 - player.squashY) * Math.min(1, 14 * dt);
+
+    // Double jump rotation decay
+    if (player.jumpSpin !== 0) {
+      const spinSpeed = 16 * dt;
+      if (Math.abs(player.jumpSpin) <= spinSpeed) {
+        player.jumpSpin = 0;
+      } else {
+        player.jumpSpin -= Math.sign(player.jumpSpin) * spinSpeed;
+      }
+    }
+
+    // Screen shake decay
+    if (state.screenShake > 0) {
+      state.screenShake = Math.max(0, state.screenShake - 2.5 * dt);
+    }
 
     if (!isRocketActive) {
       // Smooth responsive horizontal physics
@@ -496,15 +536,29 @@ export function GameCanvas() {
         if (Math.abs(player.vx) < 5) player.vx = 0;
       }
 
-      // Execute jump with coyote time and jump buffer!
+      // Ground or Coyote Jump
       if (state.jumpBufferTimer > 0 && state.coyoteTimer > 0) {
         player.vy = state.jumpPower;
         player.onGround = false;
+        player.squashX = 0.76;
+        player.squashY = 1.28;
         state.coyoteTimer = 0;
         state.jumpBufferTimer = 0;
         sound.jump();
         haptic.light();
         spawnBurst(state.particles, player.x + player.w / 2, player.y + player.h, 7, "#10b981", 1);
+      }
+      // Air Double Jump!
+      else if (state.jumpBufferTimer > 0 && player.canDoubleJump && !player.onGround) {
+        player.canDoubleJump = false;
+        player.vy = state.jumpPower * 0.92;
+        player.squashX = 0.72;
+        player.squashY = 1.34;
+        player.jumpSpin = player.facing * Math.PI * 2;
+        state.jumpBufferTimer = 0;
+        sound.doubleJump();
+        haptic.medium();
+        spawnDoubleJumpBurst(state.particles, player.x + player.w / 2, player.y + player.h / 2);
       }
 
       // Variable jump height: release early to cut upward velocity for tight precision
@@ -521,11 +575,12 @@ export function GameCanvas() {
     player.y += player.vy * dt;
     player.onGround = false;
 
-    // Platform side wall collision: prevent character from passing horizontally through candle bodies when falling
+    // Platform side wall collision: prevent passing horizontally through candle bodies
+    // Threshold set to 14px so player landing on top near edge doesn't get snagged
     for (const platform of state.platforms) {
       const py = platform.y + platform.sinkOffset;
       const candleBottom = py + platform.h;
-      if (player.y + player.h > py + 4 && player.y < candleBottom) {
+      if (player.y + player.h > py + 14 && player.y < candleBottom) {
         if (prevX + player.w <= platform.x && player.x + player.w > platform.x) {
           player.x = platform.x - player.w;
           player.vx = 0;
@@ -545,12 +600,11 @@ export function GameCanvas() {
     for (const platform of state.platforms) {
       const py = platform.y + platform.sinkOffset;
 
-      // Platform foot check: character center of mass must be horizontally on top of this candle.
-      // In the gap between candles, this is false for all platforms, so the character falls!
-      const onPlatform = footCenter >= platform.x && footCenter <= platform.x + platform.w;
+      // Platform foot check with ledge forgiveness margin (6px)
+      const onPlatform = footCenter >= platform.x - 6 && footCenter <= platform.x + platform.w + 6;
       if (!onPlatform) continue;
 
-      const crossedTop = player.vy >= 0 && previousBottom <= py + 12 && currentBottom >= py;
+      const crossedTop = player.vy >= 0 && previousBottom <= py + 14 && currentBottom >= py;
       const alreadyStanding = wasOnGround && Math.abs(currentBottom - py) <= 8 && player.vy >= -30;
 
       if ((crossedTop || alreadyStanding) && py < supportY) {
@@ -563,8 +617,19 @@ export function GameCanvas() {
       player.y = supportY - player.h;
       player.vy = 0;
       player.onGround = true;
+      player.canDoubleJump = true;
+      player.jumpSpin = 0;
+
+      // Gentle corner nudge onto candle if on the outer edge
+      if (footCenter < supportPlatform.x + 3) {
+        player.x = Math.min(player.x + 2, supportPlatform.x);
+      } else if (footCenter > supportPlatform.x + supportPlatform.w - 3) {
+        player.x = Math.max(player.x - 2, supportPlatform.x + supportPlatform.w - player.w);
+      }
 
       if (!wasOnGround) {
+        player.squashX = 1.25;
+        player.squashY = 0.75;
         sound.land();
         spawnBurst(
           state.particles,
@@ -580,21 +645,24 @@ export function GameCanvas() {
           if (state.bullStreak >= 10) {
             state.multiplier = 3;
             if (state.bullStreak === 10) {
-              sound.combo(10);
+              sound.frenzy();
               haptic.heavy();
+              state.screenShake = 0.35;
               state.floatingTexts.push({
                 x: player.x,
                 y: player.y - 25,
-                text: "🚀 MOONSHOT x3!",
-                life: 1.4,
+                text: "🚀 ALL-TIME HIGH x3!",
+                life: 1.6,
                 color: "#10b981",
               });
+              spawnBurst(state.particles, player.x + player.w / 2, player.y, 14, "#34d399", 1.8);
             }
           } else if (state.bullStreak >= 5) {
             state.multiplier = 2;
             if (state.bullStreak === 5) {
               sound.combo(5);
               haptic.medium();
+              state.screenShake = 0.2;
               state.floatingTexts.push({
                 x: player.x,
                 y: player.y - 25,
@@ -610,6 +678,7 @@ export function GameCanvas() {
             state.hasShield = false;
             sound.shield();
             haptic.success();
+            state.screenShake = 0.25;
             state.floatingTexts.push({
               x: player.x,
               y: player.y - 25,
@@ -621,6 +690,7 @@ export function GameCanvas() {
           } else {
             state.bullStreak = 0;
             state.multiplier = 1;
+            state.screenShake = 0.35;
             sound.bearWarning();
             haptic.warning();
           }
@@ -690,6 +760,7 @@ export function GameCanvas() {
           state.rocketTimer = 3.5;
           sound.rocket();
           haptic.heavy();
+          state.screenShake = 0.35;
           state.floatingTexts.push({
             x: item.x,
             y: item.y - 12,
@@ -739,17 +810,25 @@ export function GameCanvas() {
     const canvasH = canvasRef.current?.clientHeight || 500;
     const abyssY = Math.max(530, canvasH + 20);
     if (player.y > abyssY) {
+      // Find the closest platform right behind or near the fall point
+      const previousPlatforms = state.platforms.filter((p) => p.x <= player.x + 40);
+      const target =
+        previousPlatforms.length > 0
+          ? previousPlatforms[previousPlatforms.length - 1]
+          : state.platforms[0];
+
       if (state.hasShield) {
         // Shield saves from abyss fall!
         state.hasShield = false;
         sound.shield();
         haptic.success();
-        const safe = [...state.platforms].reverse().find((p) => p.x + p.w < player.x && p.bull);
-        const target = safe ?? state.platforms[0];
-        player.x = target.x + 10;
-        player.y = target.y - player.h - 8;
+        state.screenShake = 0.35;
+        player.x = target.x + Math.max(6, Math.min(target.w - player.w - 6, 12));
+        player.y = target.y - player.h - 10;
         player.vx = 0;
         player.vy = -340;
+        player.canDoubleJump = true;
+        player.jumpSpin = 0;
         state.floatingTexts.push({
           x: player.x,
           y: player.y - 25,
@@ -761,6 +840,7 @@ export function GameCanvas() {
         state.lives -= 1;
         state.bullStreak = 0;
         state.multiplier = 1;
+        state.screenShake = 0.55;
         haptic.warning();
 
         if (state.lives <= 0) {
@@ -768,14 +848,25 @@ export function GameCanvas() {
           endRun();
         } else {
           sound.bearWarning();
-          const safe = [...state.platforms].reverse().find((p) => p.x + p.w < player.x && p.bull);
-          const target = safe ?? state.platforms[0];
-          player.x = target.x + 10;
-          player.y = target.y - player.h - 8;
+          player.x = target.x + Math.max(6, Math.min(target.w - player.w - 6, 12));
+          player.y = target.y - player.h - 10;
           player.vx = 0;
           player.vy = 0;
+          player.canDoubleJump = true;
+          player.jumpSpin = 0;
         }
       }
+    }
+
+    // Update ambient dust positions
+    if (state.ambientDust) {
+      state.ambientDust.forEach((d) => {
+        d.x -= d.speed * dt;
+        if (d.x < state.cameraX - 40) {
+          d.x = state.cameraX + 800 + Math.random() * 200;
+          d.y = 40 + Math.random() * 380;
+        }
+      });
     }
 
     const targetCamera = Math.max(0, player.x - 160);
@@ -868,16 +959,28 @@ export function GameCanvas() {
       ctx.fillRect(bx < -70 ? bx + width + 140 : bx, height - bar.h, bar.w, bar.h);
     });
 
+    const shakeMagnitude = state.screenShake * state.screenShake * 12;
+    const shakeX = shakeMagnitude > 0 ? (Math.random() - 0.5) * shakeMagnitude : 0;
+    const shakeY = shakeMagnitude > 0 ? (Math.random() - 0.5) * shakeMagnitude : 0;
+
     ctx.save();
-    ctx.translate(-state.cameraX, 0);
+    ctx.translate(-state.cameraX + shakeX, shakeY);
+
+    // Ambient floating market embers/dust
+    if (state.ambientDust) {
+      state.ambientDust.forEach((d) => {
+        ctx.fillStyle = `rgba(52, 211, 153, ${d.alpha})`;
+        ctx.fillRect(d.x, d.y, d.size, d.size);
+      });
+    }
 
     // Candlesticks
     state.platforms.forEach((platform) => {
       const y = platform.y + platform.sinkOffset;
       const isBull = platform.bull;
 
-      // Realistic wick
-      ctx.strokeStyle = isBull ? "rgba(16, 185, 129, 0.85)" : "rgba(244, 63, 94, 0.85)";
+      // Realistic glowing wick
+      ctx.strokeStyle = isBull ? "rgba(16, 185, 129, 0.9)" : "rgba(244, 63, 94, 0.9)";
       ctx.lineWidth = 2;
       ctx.lineCap = "round";
       ctx.beginPath();
@@ -885,26 +988,46 @@ export function GameCanvas() {
       ctx.lineTo(platform.x + platform.w / 2, platform.wickBottom + platform.sinkOffset);
       ctx.stroke();
 
+      // Wick tip spark on bull candles
+      if (isBull) {
+        ctx.fillStyle = "#6ee7b7";
+        ctx.beginPath();
+        ctx.arc(
+          platform.x + platform.w / 2,
+          platform.wickTop + platform.sinkOffset,
+          2.2,
+          0,
+          Math.PI * 2,
+        );
+        ctx.fill();
+      }
+
       // Soft candle shadow
-      ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
+      ctx.fillStyle = "rgba(0, 0, 0, 0.38)";
       roundRect(ctx, platform.x + 2, y + 4, platform.w, platform.h, 4);
       ctx.fill();
 
-      // Rounded candlestick body with natural gradient
+      // Candlestick body with ambient neon bloom
+      ctx.save();
+      ctx.shadowColor = isBull ? "rgba(16, 185, 129, 0.45)" : "rgba(244, 63, 94, 0.38)";
+      ctx.shadowBlur = 8;
       const bodyGrad = ctx.createLinearGradient(0, y, 0, y + platform.h);
       if (isBull) {
         bodyGrad.addColorStop(0, "#10b981");
-        bodyGrad.addColorStop(1, "#059669");
+        bodyGrad.addColorStop(0.5, "#059669");
+        bodyGrad.addColorStop(1, "#047857");
       } else {
         bodyGrad.addColorStop(0, "#f43f5e");
+        bodyGrad.addColorStop(0.5, "#e11d48");
         bodyGrad.addColorStop(1, "#be123c");
       }
       ctx.fillStyle = bodyGrad;
       roundRect(ctx, platform.x, y, platform.w, platform.h, 4);
       ctx.fill();
+      ctx.restore();
 
       // Subtle top highlight sheen
-      ctx.strokeStyle = isBull ? "rgba(255, 255, 255, 0.3)" : "rgba(255, 255, 255, 0.2)";
+      ctx.strokeStyle = isBull ? "rgba(255, 255, 255, 0.35)" : "rgba(255, 255, 255, 0.22)";
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(platform.x + 3, y + 1);
@@ -982,6 +1105,10 @@ export function GameCanvas() {
       facing: player.facing,
       animation: player.animation,
       runClock: player.runClock,
+      squashX: player.squashX,
+      squashY: player.squashY,
+      jumpSpin: player.jumpSpin,
+      now,
     });
 
     // Floating text animations
@@ -1447,40 +1574,46 @@ export function GameCanvas() {
       </div>
 
       {/* Mobile Touch Controls with Haptics */}
-      <div className="mt-3 grid grid-cols-[auto_auto_1fr] items-center gap-2.5">
+      <div className="mt-3 grid grid-cols-[auto_auto_1fr] items-center gap-2.5 touch-none select-none">
         <button
-          onPointerDown={() => {
+          onPointerDown={(e) => {
+            e.preventDefault();
             haptic.light();
             setInput("left", true);
           }}
           onPointerLeave={() => setInput("left", false)}
           onPointerUp={() => setInput("left", false)}
-          className="glass-low grid h-14 w-14 place-items-center rounded-2xl text-white active:bg-primary/20 active:scale-95 transition-transform border border-white/8 shadow-md"
+          onPointerCancel={() => setInput("left", false)}
+          className="glass-low touch-none select-none grid h-14 w-14 place-items-center rounded-2xl text-white active:bg-primary/20 active:scale-95 transition-transform border border-white/8 shadow-md"
           aria-label="Sola koş"
         >
           <ArrowLeft className="h-6 w-6" />
         </button>
 
         <button
-          onPointerDown={() => {
+          onPointerDown={(e) => {
+            e.preventDefault();
             haptic.light();
             setInput("right", true);
           }}
           onPointerLeave={() => setInput("right", false)}
           onPointerUp={() => setInput("right", false)}
-          className="glass-low grid h-14 w-14 place-items-center rounded-2xl text-white active:bg-primary/20 active:scale-95 transition-transform border border-white/8 shadow-md"
+          onPointerCancel={() => setInput("right", false)}
+          className="glass-low touch-none select-none grid h-14 w-14 place-items-center rounded-2xl text-white active:bg-primary/20 active:scale-95 transition-transform border border-white/8 shadow-md"
           aria-label="Sağa koş"
         >
           <ArrowRight className="h-6 w-6" />
         </button>
 
         <button
-          onPointerDown={() => {
+          onPointerDown={(e) => {
+            e.preventDefault();
             setInput("jump", true);
           }}
           onPointerLeave={() => setInput("jump", false)}
           onPointerUp={() => setInput("jump", false)}
-          className="primary-cta grid h-14 w-full place-items-center rounded-2xl bg-primary text-white active:scale-95 transition-transform shadow-lg"
+          onPointerCancel={() => setInput("jump", false)}
+          className="primary-cta touch-none select-none grid h-14 w-full place-items-center rounded-2xl bg-primary text-white active:scale-95 transition-transform shadow-lg"
           aria-label="Zıpla"
         >
           <div className="flex flex-col items-center">
@@ -1534,6 +1667,24 @@ function spawnBurst(
       life,
       maxLife: life,
       color,
+    });
+  }
+}
+
+function spawnDoubleJumpBurst(particles: Particle[], x: number, y: number) {
+  const count = 12;
+  for (let i = 0; i < count; i += 1) {
+    const angle = (Math.PI * 2 * i) / count;
+    const speed = 48 + (i % 2) * 18;
+    particles.push({
+      x,
+      y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed * 0.7 + 10,
+      size: 3,
+      life: 0.26,
+      maxLife: 0.26,
+      color: i % 2 === 0 ? "#34d399" : "#38bdf8",
     });
   }
 }
@@ -1731,6 +1882,10 @@ function drawPlayer(
     facing: number;
     animation: PlayerAnimation;
     runClock: number;
+    squashX: number;
+    squashY: number;
+    jumpSpin: number;
+    now: number;
   },
 ) {
   const px = w / 8;
@@ -1755,6 +1910,7 @@ function drawPlayer(
   if (sprite.complete && sprite.naturalWidth > 0) {
     const isRunning = opts.animation === "sol" || opts.animation === "sag";
     const walkBob = isRunning ? Math.sin(opts.runClock * 9) * 3.1 : 0;
+    const idleBreathing = opts.animation === "bekle" ? Math.sin(opts.now / 350) * 1.5 : 0;
     const tilt =
       opts.animation === "zipla"
         ? -0.16 * opts.facing
@@ -1764,25 +1920,26 @@ function drawPlayer(
             ? Math.sin(opts.runClock * 9) * 0.085
             : 0;
     const scaleX =
-      opts.animation === "zipla"
+      (opts.animation === "zipla"
         ? 0.9
         : opts.animation === "dus"
           ? 1.12
           : isRunning
             ? 1 + Math.sin(opts.runClock * 9) * 0.045
-            : 1;
+            : 1) * opts.squashX;
     const scaleY =
-      opts.animation === "zipla"
+      (opts.animation === "zipla"
         ? 1.16
         : opts.animation === "dus"
           ? 0.88
           : isRunning
             ? 1 - Math.sin(opts.runClock * 9) * 0.03
-            : 1;
+            : 1) * opts.squashY;
     const drawW = 52;
     const drawH = 52;
     const drawX = x + w / 2 - drawW / 2;
-    const drawY = y + h - drawH + jumpLift + walkBob;
+    const drawY = y + h - drawH + jumpLift + walkBob + idleBreathing;
+    const totalRotation = tilt + opts.jumpSpin;
 
     if (isRunning) {
       drawSpriteGhost(
@@ -1805,7 +1962,7 @@ function drawPlayer(
 
     ctx.save();
     ctx.translate(drawX + drawW / 2, drawY + drawH / 2);
-    ctx.rotate(tilt);
+    ctx.rotate(totalRotation);
     ctx.scale(opts.facing < 0 ? -scaleX : scaleX, scaleY);
     ctx.drawImage(sprite, -drawW / 2, -drawH / 2, drawW, drawH);
     ctx.restore();
