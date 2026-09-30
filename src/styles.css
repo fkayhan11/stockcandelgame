@@ -44,41 +44,41 @@
 }
 
 :root {
-  /* Natural High-End Fintech Dark Palette */
-  --background: #0b0f19;
+  /* Natural High-End Fintech Velvet Midnight Palette */
+  --background: #070a12;
   --foreground: #f8fafc;
-  --surface: #111827;
-  --surface-low: #0e1420;
-  --surface-container: #161f30;
-  --surface-high: #1e293b;
-  --card: #131b2c;
-  --card-foreground: #f1f5f9;
-  --popover: #151d2e;
-  --popover-foreground: #f1f5f9;
+  --surface: #0d1322;
+  --surface-low: #090e18;
+  --surface-container: #12192b;
+  --surface-high: #182238;
+  --card: #0e1526;
+  --card-foreground: #f8fafc;
+  --popover: #12192b;
+  --popover-foreground: #f8fafc;
 
-  /* Natural Emerald Green - Clean, professional, energetic */
-  --primary: #10b981;
-  --primary-foreground: #ffffff;
-  --primary-glow: #34d399;
+  /* Natural Mint Emerald - Clean, luminous, professional */
+  --primary: #00d68f;
+  --primary-foreground: #04140e;
+  --primary-glow: #00f5a3;
 
-  --secondary: #1e293b;
+  --secondary: #141c30;
   --secondary-foreground: #e2e8f0;
-  --muted: #1e293b;
-  --muted-foreground: #94a3b8;
-  --accent: #10b981;
-  --accent-foreground: #ffffff;
+  --muted: #141c30;
+  --muted-foreground: #8a99ad;
+  --accent: #00d68f;
+  --accent-foreground: #04140e;
 
-  /* Natural Coral Red */
-  --destructive: #f43f5e;
+  /* Natural Rose Coral */
+  --destructive: #ff3366;
   --destructive-foreground: #ffffff;
 
-  --border: rgba(255, 255, 255, 0.08);
-  --input: rgba(255, 255, 255, 0.12);
-  --ring: #10b981;
+  --border: rgba(255, 255, 255, 0.07);
+  --input: rgba(255, 255, 255, 0.1);
+  --ring: #00d68f;
 
-  --bull: #10b981;
-  --bear: #f43f5e;
-  --gold: #f59e0b;
+  --bull: #00d68f;
+  --bear: #ff3366;
+  --gold: #fbb03b;
 }
 
 .dark {
@@ -102,9 +102,8 @@
     color: var(--color-foreground);
     font-family: var(--font-sans);
     background-image:
-      radial-gradient(ellipse at 50% 0%, rgba(16, 185, 129, 0.07) 0%, transparent 45%),
-      radial-gradient(circle at 85% 10%, rgba(245, 158, 11, 0.04) 0%, transparent 35%),
-      linear-gradient(180deg, #0d121e 0%, #0b0f19 100%);
+      radial-gradient(ellipse at 50% -10%, rgba(0, 214, 143, 0.06) 0%, transparent 55%),
+      linear-gradient(180deg, #090e1a 0%, #070a12 100%);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     overscroll-behavior: none;
