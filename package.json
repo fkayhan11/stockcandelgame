@@ -1,5 +1,7 @@
 {
-  "name": "tanstack_start_ts",
+  "name": "block-jumper",
+  "version": "1.0.0",
+  "description": "Block Jumper: Financial Candlestick Arcade Runner",
   "private": true,
   "sideEffects": false,
   "type": "module",

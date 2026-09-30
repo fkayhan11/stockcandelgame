@@ -249,7 +249,7 @@ export async function fetchMarketCandles(
     // continue to historical company series
   }
 
-  // 3. Fallback: Authenticated Real Historical Company Market Profile
+  // Fallback: Offline realistic historical company profile generator
   return {
     candles: generateRealHistoricalCompanyCandles(symbol, timeframe, count),
     source: "gerçek-tarihi",
@@ -261,16 +261,16 @@ function generateRealHistoricalCompanyCandles(
   timeframe: TimeframeConfig,
   count: number,
 ): Candle[] {
-  // Real company historical baseline data profiles
+  // Historical asset baselines and typical volatility metrics
   const profiles: Record<string, { startPrice: number; endPrice: number; volatility: number }> = {
-    NVDA: { startPrice: 94.2, endPrice: 138.5, volatility: 0.028 }, // Real 2024 AI rally
-    TSLA: { startPrice: 172.5, endPrice: 254.0, volatility: 0.035 }, // Real 2024 EV rebound
-    AAPL: { startPrice: 168.0, endPrice: 232.0, volatility: 0.015 }, // Real 2024 Apple Intelligence rally
-    AMZN: { startPrice: 145.0, endPrice: 198.0, volatility: 0.02 }, // Real 2024 AWS growth
-    MSFT: { startPrice: 375.0, endPrice: 452.0, volatility: 0.016 }, // Real 2024 Copilot expansion
-    THYAO: { startPrice: 215.0, endPrice: 312.0, volatility: 0.026 }, // Real 2024 BIST TRY run
-    GARAN: { startPrice: 58.0, endPrice: 118.0, volatility: 0.024 }, // Real 2024 Banking rally
-    BTC: { startPrice: 52000, endPrice: 89000, volatility: 0.038 }, // Real 2024 All-time-high rally
+    NVDA: { startPrice: 94.2, endPrice: 138.5, volatility: 0.028 },
+    TSLA: { startPrice: 172.5, endPrice: 254.0, volatility: 0.035 },
+    AAPL: { startPrice: 168.0, endPrice: 232.0, volatility: 0.015 },
+    AMZN: { startPrice: 145.0, endPrice: 198.0, volatility: 0.02 },
+    MSFT: { startPrice: 375.0, endPrice: 452.0, volatility: 0.016 },
+    THYAO: { startPrice: 215.0, endPrice: 312.0, volatility: 0.026 },
+    GARAN: { startPrice: 58.0, endPrice: 118.0, volatility: 0.024 },
+    BTC: { startPrice: 52000, endPrice: 89000, volatility: 0.038 },
   };
 
   const profile = profiles[symbol.symbol] ?? {

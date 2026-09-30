@@ -1,4 +1,6 @@
-// Characters: parody names of real billionaires using "-us" etc. NO "-ium" suffix.
+/**
+ * Roster configuration for playable runner characters and skins.
+ */
 export type Character = {
   id: string;
   name: string;
