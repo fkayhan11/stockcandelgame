@@ -5,6 +5,12 @@ class SoundEngine {
   private ctx: AudioContext | null = null;
   private isMuted: boolean = false;
 
+  private bgmTimer: number | null = null;
+  private bgmStep: number = 0;
+  private bgmPlaying: boolean = false;
+  private bgmSpeed: number = 1.0;
+  private bgmIntensity: number = 1.0;
+
   constructor() {
     if (typeof window !== "undefined") {
       this.isMuted = localStorage.getItem("game_sound_muted") === "true";
@@ -36,7 +42,125 @@ class SoundEngine {
     if (typeof window !== "undefined") {
       localStorage.setItem("game_sound_muted", String(this.isMuted));
     }
+    if (this.isMuted) {
+      this.stopBgm();
+    }
     return this.isMuted;
+  }
+
+  // --- Synthwave Arcade Procedural Background Music ---
+  public startBgm() {
+    if (this.isMuted || this.bgmPlaying) return;
+    const ctx = this.initCtx();
+    if (!ctx) return;
+    this.bgmPlaying = true;
+    this.bgmStep = 0;
+    this.scheduleBgmTick();
+  }
+
+  public stopBgm() {
+    this.bgmPlaying = false;
+    if (this.bgmTimer !== null) {
+      window.clearTimeout(this.bgmTimer);
+      this.bgmTimer = null;
+    }
+  }
+
+  public setBgmIntensity(streak: number, isFever: boolean) {
+    if (isFever) {
+      this.bgmSpeed = 1.25;
+      this.bgmIntensity = 1.5;
+    } else {
+      const streakBoost = Math.min(0.2, streak * 0.015);
+      this.bgmSpeed = 1.0 + streakBoost;
+      this.bgmIntensity = 1.0 + (streak >= 5 ? 0.3 : 0);
+    }
+  }
+
+  private scheduleBgmTick = () => {
+    if (!this.bgmPlaying || this.isMuted || !this.ctx) return;
+    this.playBgmStep(this.bgmStep);
+    this.bgmStep = (this.bgmStep + 1) % 32;
+
+    const baseIntervalMs = 135 / this.bgmSpeed;
+    this.bgmTimer = window.setTimeout(this.scheduleBgmTick, baseIntervalMs);
+  };
+
+  private playBgmStep(step: number) {
+    if (!this.ctx || this.isMuted) return;
+    const t = this.ctx.currentTime;
+
+    // Chords: Am (steps 0-7), F (steps 8-15), C (steps 16-23), G (steps 24-31)
+    const chordIdx = Math.floor(step / 8);
+    const bassFreqs = [110, 87.31, 65.41, 98.0]; // A2, F2, C2, G2
+    const arpChords = [
+      [220, 261.63, 329.63, 440], // Am: A3, C4, E4, A4
+      [174.61, 220, 261.63, 349.23], // F: F3, A3, C4, F4
+      [261.63, 329.63, 392, 523.25], // C: C4, E4, G4, C5
+      [196, 246.94, 293.66, 392], // G: G3, B3, D4, G4
+    ];
+
+    // Bassline pulse on steps 0, 2, 4, 6 of each chord
+    if (step % 2 === 0) {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      const filter = this.ctx.createBiquadFilter();
+
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(bassFreqs[chordIdx], t);
+
+      filter.type = "lowpass";
+      filter.frequency.setValueAtTime(450 * this.bgmIntensity, t);
+
+      const bassVol = 0.045 * Math.min(1.2, this.bgmIntensity);
+      gain.gain.setValueAtTime(bassVol, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.ctx.destination);
+
+      osc.start(t);
+      osc.stop(t + 0.2);
+    }
+
+    // Melodic Arpeggio pulse
+    const chord = arpChords[chordIdx];
+    const arpFreq = chord[step % 4];
+    const arpOsc = this.ctx.createOscillator();
+    const arpGain = this.ctx.createGain();
+
+    arpOsc.type = "sine";
+    arpOsc.frequency.setValueAtTime(arpFreq, t);
+
+    const arpVol = (step % 4 === 0 ? 0.04 : 0.025) * Math.min(1.3, this.bgmIntensity);
+    arpGain.gain.setValueAtTime(arpVol, t);
+    arpGain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+
+    arpOsc.connect(arpGain);
+    arpGain.connect(this.ctx.destination);
+
+    arpOsc.start(t);
+    arpOsc.stop(t + 0.13);
+
+    // Subtle Kick on every 4th step (step 0, 4, 8, 12, 16...)
+    if (step % 4 === 0) {
+      const kickOsc = this.ctx.createOscillator();
+      const kickGain = this.ctx.createGain();
+
+      kickOsc.type = "sine";
+      kickOsc.frequency.setValueAtTime(110, t);
+      kickOsc.frequency.exponentialRampToValueAtTime(38, t + 0.08);
+
+      kickGain.gain.setValueAtTime(0.06, t);
+      kickGain.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+
+      kickOsc.connect(kickGain);
+      kickGain.connect(this.ctx.destination);
+
+      kickOsc.start(t);
+      kickOsc.stop(t + 0.1);
+    }
   }
 
   // Jump: energetic melodic chirp
@@ -118,6 +242,104 @@ class SoundEngine {
 
       osc.start(t + i * 0.05);
       osc.stop(t + i * 0.05 + 0.26);
+    });
+  }
+
+  // Short Squeeze Spring launch: high elastic bounce
+  public springJump() {
+    if (this.isMuted) return;
+    const ctx = this.initCtx();
+    if (!ctx) return;
+
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(180, t);
+    osc.frequency.exponentialRampToValueAtTime(920, t + 0.22);
+
+    gain.gain.setValueAtTime(0.22, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(t);
+    osc.stop(t + 0.26);
+  }
+
+  // Fever / Moonshot mode activation fanfare
+  public feverStart() {
+    if (this.isMuted) return;
+    const ctx = this.initCtx();
+    if (!ctx) return;
+
+    const t = ctx.currentTime;
+    [440, 554.37, 659.25, 880, 1108.73, 1318.51].forEach((freq, i) => {
+      if (!ctx) return;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, t + i * 0.035);
+
+      gain.gain.setValueAtTime(0.16, t + i * 0.035);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + i * 0.035 + 0.2);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(t + i * 0.035);
+      osc.stop(t + i * 0.035 + 0.21);
+    });
+  }
+
+  // Fragile candle cracking warning
+  public crackWarning() {
+    if (this.isMuted) return;
+    const ctx = this.initCtx();
+    if (!ctx) return;
+
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = "sawtooth";
+    osc.frequency.setValueAtTime(320, t);
+    osc.frequency.exponentialRampToValueAtTime(90, t + 0.08);
+
+    gain.gain.setValueAtTime(0.12, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(t);
+    osc.stop(t + 0.1);
+  }
+
+  // Perfect center landing chime
+  public perfectLanding() {
+    if (this.isMuted) return;
+    const ctx = this.initCtx();
+    if (!ctx) return;
+
+    const t = ctx.currentTime;
+    [1046.5, 1318.51, 1567.98].forEach((freq, idx) => {
+      if (!ctx) return;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, t + idx * 0.03);
+
+      gain.gain.setValueAtTime(0.14, t + idx * 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + idx * 0.03 + 0.16);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(t + idx * 0.03);
+      osc.stop(t + idx * 0.03 + 0.17);
     });
   }
 

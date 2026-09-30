@@ -3,7 +3,17 @@ import { AppShell } from "@/components/AppShell";
 import { PortraitCanvas } from "@/components/PortraitCanvas";
 import { CHARACTERS } from "@/lib/game-data";
 import { useGameStore } from "@/lib/store";
-import { Play, ChevronRight, Trophy, Zap, ShieldAlert } from "lucide-react";
+import {
+  Play,
+  ChevronRight,
+  Trophy,
+  Zap,
+  ShieldAlert,
+  Target,
+  CheckCircle2,
+  Flame,
+  ArrowUpCircle,
+} from "lucide-react";
 import { sound } from "@/lib/audio";
 import { haptic } from "@/lib/haptics";
 import { LegalNoticeModal } from "@/components/LegalNoticeModal";
@@ -22,12 +32,51 @@ function Home() {
   const selected = useGameStore((s) => s.selectedCharacter);
   const selectedSkinId = useGameStore((s) => s.selectedSkins[selected] || "base");
   const highScore = useGameStore((s) => s.highScore);
+  const totalWealth = useGameStore((s) => s.totalWealth);
+  const claimedMissions = useGameStore((s) => s.claimedMissions);
+  const claimMission = useGameStore((s) => s.claimMission);
   const character = CHARACTERS.find((c) => c.id === selected) || CHARACTERS[0];
 
   const handleStartClick = () => {
     haptic.medium();
     sound.click();
   };
+
+  const handleClaim = (id: string, coins: number) => {
+    sound.gold();
+    haptic.heavy();
+    claimMission(id, coins);
+  };
+
+  const missions = [
+    {
+      id: "run_300m",
+      title: "300m Mesafe Kat Et",
+      desc: "En iyi koşunda 300 metreye ulaş",
+      reward: 50,
+      current: Math.min(300, highScore),
+      target: 300,
+      completed: highScore >= 300,
+    },
+    {
+      id: "earn_200d",
+      title: "Toplam $200 Kazan",
+      desc: "Koşulardan $200 servet biriktir",
+      reward: 75,
+      current: Math.min(200, totalWealth),
+      target: 200,
+      completed: totalWealth >= 200,
+    },
+    {
+      id: "run_1000m",
+      title: "1.000m Maratoncu",
+      desc: "Piyasanın zirvesine tırman",
+      reward: 150,
+      current: Math.min(1000, highScore),
+      target: 1000,
+      completed: highScore >= 1000,
+    },
+  ];
 
   return (
     <AppShell>
@@ -109,31 +158,116 @@ function Home() {
           <span>KOŞUYA BAŞLA</span>
         </Link>
 
-        {/* Quick Mechanics Guide */}
+        {/* Daily Quests / Günün Görevleri */}
+        <div className="mt-4 rounded-2xl glass p-4 border border-white/8">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 font-display text-sm font-bold text-white">
+              <Target className="h-4 w-4 text-amber-400" />
+              <span>Günün Görevleri</span>
+            </div>
+            <span className="font-mono text-[10px] text-muted-foreground">
+              {missions.filter((m) => claimedMissions.includes(m.id)).length}/3 Tamamlandı
+            </span>
+          </div>
+
+          <div className="mt-3 space-y-2.5">
+            {missions.map((m) => {
+              const isClaimed = claimedMissions.includes(m.id);
+              const progressPct = Math.min(100, Math.round((m.current / m.target) * 100));
+
+              return (
+                <div
+                  key={m.id}
+                  className="glass-low flex items-center justify-between gap-3 rounded-xl p-3 border border-white/6"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 font-bold text-xs text-white">
+                      <span>{m.title}</span>
+                      <span className="font-mono text-[10px] text-amber-400">+{m.reward} C</span>
+                    </div>
+                    <div className="text-[10px] text-muted-foreground truncate">{m.desc}</div>
+                    <div className="mt-1.5 flex items-center gap-2">
+                      <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-slate-800">
+                        <div
+                          className="h-full bg-primary rounded-full transition-all duration-300"
+                          style={{ width: `${progressPct}%` }}
+                        />
+                      </div>
+                      <span className="font-mono text-[9px] text-muted-foreground">
+                        {m.current}/{m.target}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div>
+                    {isClaimed ? (
+                      <div className="flex items-center gap-1 font-mono text-[10px] font-bold text-muted-foreground px-2 py-1">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> ALINDI
+                      </div>
+                    ) : m.completed ? (
+                      <button
+                        onClick={() => handleClaim(m.id, m.reward)}
+                        className="rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-mono text-[11px] font-bold px-3 py-1.5 active:scale-95 transition-all shadow-md animate-pulse"
+                      >
+                        ÖDÜLÜ AL
+                      </button>
+                    ) : (
+                      <div className="rounded-xl bg-slate-800/80 text-muted-foreground font-mono text-[10px] font-semibold px-2.5 py-1">
+                        %{progressPct}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* 4-Grid Mechanics Showcase */}
         <div className="mt-4 grid grid-cols-2 gap-2.5">
-          <div className="glass-low flex items-center gap-2.5 rounded-xl p-3 border border-emerald-500/15">
+          <div className="glass-low flex items-center gap-2.5 rounded-xl p-3 border border-emerald-500/20">
             <div className="h-7 w-2 rounded-full bg-emerald-500" />
             <div>
               <div className="text-xs font-bold text-white flex items-center gap-1">
                 Boğa Mumu <Zap className="h-3 w-3 text-emerald-400" />
               </div>
-              <div className="text-[10px] text-muted-foreground">Güvenli platform, hız kazan</div>
+              <div className="text-[10px] text-muted-foreground">Stabil platform & seri</div>
             </div>
           </div>
 
-          <div className="glass-low flex items-center gap-2.5 rounded-xl p-3 border border-rose-500/15">
+          <div className="glass-low flex items-center gap-2.5 rounded-xl p-3 border border-rose-500/20">
             <div className="h-7 w-2 rounded-full bg-rose-500" />
             <div>
               <div className="text-xs font-bold text-white flex items-center gap-1">
-                Ayı Mumu <ShieldAlert className="h-3 w-3 text-rose-400" />
+                Ayı / Kırılgan <ShieldAlert className="h-3 w-3 text-rose-400" />
               </div>
-              <div className="text-[10px] text-muted-foreground">Kaydırır & hızla çöker</div>
+              <div className="text-[10px] text-muted-foreground">Kaydırır & anında çöker</div>
+            </div>
+          </div>
+
+          <div className="glass-low flex items-center gap-2.5 rounded-xl p-3 border border-amber-500/20">
+            <div className="h-7 w-2 rounded-full bg-amber-500" />
+            <div>
+              <div className="text-xs font-bold text-white flex items-center gap-1">
+                Short Squeeze <ArrowUpCircle className="h-3 w-3 text-amber-400" />
+              </div>
+              <div className="text-[10px] text-muted-foreground">Göğe fırlatır & altın yayar</div>
+            </div>
+          </div>
+
+          <div className="glass-low flex items-center gap-2.5 rounded-xl p-3 border border-purple-500/20">
+            <div className="h-7 w-2 rounded-full bg-purple-500" />
+            <div>
+              <div className="text-xs font-bold text-white flex items-center gap-1">
+                Boğa Çılgınlığı <Flame className="h-3 w-3 text-purple-400" />
+              </div>
+              <div className="text-[10px] text-muted-foreground">Moonshot x5 & dokunulmaz</div>
             </div>
           </div>
         </div>
 
         {/* Economy summary */}
-        <div className="glass-low mt-2.5 flex items-center justify-between rounded-xl px-4 py-2.5 text-xs text-muted-foreground">
+        <div className="glass-low mt-3 flex items-center justify-between rounded-xl px-4 py-2.5 text-xs text-muted-foreground">
           <span>
             Toplanan her <strong>100 Dolar</strong>
           </span>

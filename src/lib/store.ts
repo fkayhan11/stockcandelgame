@@ -12,7 +12,10 @@ type State = {
   selectedCharacter: string;
   selectedSkins: Record<string, string>; // characterId -> skinId
   ownedSkins: Record<string, string[]>; // characterId -> [skinIds]
+  claimedMissions: string[];
   addDollars: (n: number) => void;
+  addCoin: (n: number) => void;
+  claimMission: (id: string, rewardCoins: number) => boolean;
   exchange: (dollars: number) => void;
   selectCharacter: (id: string) => void;
   selectSkin: (charId: string, skinId: string) => void;
@@ -38,11 +41,29 @@ export const useGameStore = create<State>()(
       selectedCharacter: "elanus",
       selectedSkins: initialSkins,
       ownedSkins: initialOwned,
+      claimedMissions: [],
 
       addDollars: (n) => {
         const safeN = clampSafeInteger(n, 0, 500_000);
         if (safeN <= 0) return;
         set((s) => ({ dollars: clampSafeInteger(s.dollars + safeN, 0, 1_000_000_000) }));
+      },
+
+      addCoin: (n) => {
+        const safeN = clampSafeInteger(n, 0, 100_000);
+        if (safeN <= 0) return;
+        set((s) => ({ coin: clampSafeInteger(s.coin + safeN, 0, 1_000_000_000) }));
+      },
+
+      claimMission: (id, rewardCoins) => {
+        const s = get();
+        if (s.claimedMissions.includes(id)) return false;
+        const safeReward = clampSafeInteger(rewardCoins, 1, 10_000);
+        set({
+          claimedMissions: [...s.claimedMissions, id],
+          coin: clampSafeInteger(s.coin + safeReward, 0, 1_000_000_000),
+        });
+        return true;
       },
 
       exchange: (dollars) => {

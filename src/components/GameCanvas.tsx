@@ -35,17 +35,24 @@ import {
 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 
+type PlatformType = "normal" | "volatile" | "spring" | "fragile";
+
 type Platform = {
   x: number;
   y: number;
+  baseY: number;
   w: number;
   h: number;
   bull: boolean;
+  type: PlatformType;
   price: number;
   label: string;
   wickTop: number;
   wickBottom: number;
   sinkOffset: number;
+  crackTimer: number;
+  cracked: boolean;
+  sinePhase: number;
 };
 
 type CollectibleKind = "dolar" | "altin" | "kalkan" | "miknatis" | "roket";
@@ -71,6 +78,14 @@ type Particle = {
   life: number;
   maxLife: number;
   color: string;
+};
+
+type CityBuilding = {
+  x: number;
+  w: number;
+  h: number;
+  windows: { x: number; y: number; on: boolean }[];
+  billboard?: string;
 };
 
 const DEFAULT_TIMEFRAME = TIMEFRAMES.find((t) => t.id === "1dk") ?? TIMEFRAMES[0];
@@ -106,6 +121,9 @@ export function GameCanvas() {
     hasShield: false,
     magnetSeconds: 0,
     rocketSeconds: 0,
+    feverCharge: 0,
+    feverSeconds: 0,
+    perfectLandings: 0,
   });
 
   const selectedCharId = useGameStore((s) => s.selectedCharacter);
@@ -131,10 +149,14 @@ export function GameCanvas() {
     hasShield: false,
     magnetTimer: 0,
     rocketTimer: 0,
+    feverCharge: 0,
+    feverTimer: 0,
+    perfectCount: 0,
     coyoteTimer: 0,
     jumpBufferTimer: 0,
     screenShake: 0,
     ambientDust: [] as { x: number; y: number; speed: number; size: number; alpha: number }[],
+    cityBuildings: [] as CityBuilding[],
     player: {
       x: 80,
       y: 0,
@@ -271,9 +293,13 @@ export function GameCanvas() {
     const next = !isPausedRef.current;
     if (next) {
       sound.pause();
+      sound.stopBgm();
       haptic.light();
     } else {
       sound.resume();
+      if (stateRef.current.started && !stateRef.current.gameOver) {
+        sound.startBgm();
+      }
       haptic.light();
     }
     setIsPaused(next);
@@ -283,6 +309,9 @@ export function GameCanvas() {
     haptic.light();
     const muted = sound.toggleMute();
     setIsMuted(muted);
+    if (!muted && stateRef.current.started && !stateRef.current.gameOver && !isPausedRef.current) {
+      sound.startBgm();
+    }
   };
 
   const buildLevel = (candles: Candle[], tf: TimeframeConfig) => {
@@ -323,20 +352,55 @@ export function GameCanvas() {
       const w = Math.max(72, tf.candleWidth * (0.95 + deterministicWave(i, 0.12)));
       const gap = Math.max(28, Math.min(48, tf.gap * (0.9 + deterministicWave(i + 11, 0.18))));
 
+      let type: PlatformType = "normal";
+      if (i > 3) {
+        if (bull) {
+          if (i % 7 === 0) {
+            type = "spring"; // Short Squeeze Trampoline!
+          } else if (i % 5 === 0) {
+            type = "volatile"; // Moving up and down!
+          }
+        } else {
+          if (i % 6 === 0) {
+            type = "fragile"; // Cracks and collapses!
+          }
+        }
+      }
+
       platforms.push({
         x: cursorX,
         y: bodyTop,
+        baseY: bodyTop,
         w,
         h,
         bull,
+        type,
         price: candle.c,
         label: candle.label,
         wickTop,
         wickBottom,
         sinkOffset: 0,
+        crackTimer: 0,
+        cracked: false,
+        sinePhase: i * 0.9,
       });
 
-      if (i > 1 && i % 2 === 0) {
+      // If Short Squeeze Spring candle, spawn an arc of 4 gold coins in the sky
+      if (type === "spring") {
+        for (let coinIdx = 0; coinIdx < 4; coinIdx++) {
+          const coinArcX = cursorX + w / 2 + (coinIdx - 1.5) * 28;
+          const coinArcY = bodyTop - 110 - Math.sin((coinIdx / 3) * Math.PI) * 45;
+          collectibles.push({
+            x: coinArcX,
+            y: coinArcY,
+            r: 11,
+            kind: "altin",
+            value: 50,
+            collected: false,
+            bob: coinIdx * 0.5,
+          });
+        }
+      } else if (i > 1 && i % 2 === 0) {
         // Power-up spawn every 14 candles
         const isPowerup = i > 4 && i % 14 === 0;
         const isGold = !isPowerup && i % 5 === 0;
@@ -396,6 +460,9 @@ export function GameCanvas() {
     state.hasShield = false;
     state.magnetTimer = 0;
     state.rocketTimer = 0;
+    state.feverCharge = 0;
+    state.feverTimer = 0;
+    state.perfectCount = 0;
     state.gameOver = false;
     state.particles = [];
     state.floatingTexts = [];
@@ -404,6 +471,26 @@ export function GameCanvas() {
     state.elapsedMs = 0;
     state.jumpPower = -560 * tf.jumpBoost;
     setIsPaused(false);
+
+    // Far Cyberpunk City Skyline
+    const billboards = ["$BTC 100K", "BULLS ONLY", "BUY THE DIP", "ETH ▲", "MOONSHOT", "HODL"];
+    state.cityBuildings = Array.from({ length: 32 }, (_, i) => {
+      const w = 48 + ((i * 37) % 45);
+      const h = 110 + ((i * 53) % 190);
+      const windows: { x: number; y: number; on: boolean }[] = [];
+      for (let wx = 8; wx < w - 8; wx += 10) {
+        for (let wy = 12; wy < h - 16; wy += 14) {
+          windows.push({ x: wx, y: wy, on: (i + wx + wy) % 3 !== 0 });
+        }
+      }
+      return {
+        x: i * 75,
+        w,
+        h,
+        windows,
+        billboard: i % 4 === 1 ? billboards[(i >> 2) % billboards.length] : undefined,
+      };
+    });
 
     // Ambient floating market embers/dust
     state.ambientDust = Array.from({ length: 32 }, (_, i) => ({
@@ -433,6 +520,9 @@ export function GameCanvas() {
       hasShield: false,
       magnetSeconds: 0,
       rocketSeconds: 0,
+      feverCharge: 0,
+      feverSeconds: 0,
+      perfectLandings: 0,
     });
   };
 
@@ -445,8 +535,75 @@ export function GameCanvas() {
     if (!state.started && activeMove) {
       state.started = true;
       state.startAt = now;
+      sound.startBgm();
     }
     if (state.started) state.elapsedMs = now - state.startAt;
+
+    // Volatile & Fragile Platforms Update
+    for (const p of state.platforms) {
+      if (p.type === "volatile") {
+        p.y = p.baseY + Math.sin(now / 380 + p.sinePhase) * 26;
+      } else if (p.type === "fragile" && p.crackTimer > 0 && !p.cracked) {
+        p.crackTimer -= dt;
+        p.sinkOffset = Math.sin(now / 25) * 3.5;
+        if (Math.random() > 0.45) {
+          state.particles.push({
+            x: p.x + Math.random() * p.w,
+            y: p.y + Math.random() * p.h,
+            vx: (Math.random() - 0.5) * 40,
+            vy: 20 + Math.random() * 40,
+            size: 2,
+            life: 0.18,
+            maxLife: 0.18,
+            color: "#f43f5e",
+          });
+        }
+        if (p.crackTimer <= 0) {
+          p.cracked = true;
+          p.sinkOffset = 9999;
+          spawnBurst(state.particles, p.x + p.w / 2, p.y + p.h / 2, 14, "#e11d48", 1.5);
+        }
+      }
+    }
+
+    // Fever / Moonshot Mode Update
+    const isFeverActive = state.feverTimer > 0;
+    if (isFeverActive) {
+      state.feverTimer = Math.max(0, state.feverTimer - dt);
+      state.multiplier = 5;
+
+      // Super Magnet in Fever Mode
+      const px = player.x + player.w / 2;
+      const py = player.y + player.h / 2;
+      for (const item of state.collectibles) {
+        if (item.collected) continue;
+        const dx = px - item.x;
+        const dy = py - item.y;
+        const distSq = dx * dx + dy * dy;
+        if (distSq < 380 * 380) {
+          const dist = Math.sqrt(distSq);
+          item.x += (dx / dist) * 440 * dt;
+          item.y += (dy / dist) * 440 * dt;
+        }
+      }
+
+      // Rainbow / Gold fever trail
+      state.particles.push({
+        x: player.x + player.w / 2 - player.facing * 12,
+        y: player.y + player.h / 2 + (Math.random() - 0.5) * 16,
+        vx: -player.facing * (60 + Math.random() * 60),
+        vy: (Math.random() - 0.5) * 40,
+        size: 3.5,
+        life: 0.28,
+        maxLife: 0.28,
+        color: ["#f59e0b", "#10b981", "#38bdf8", "#ec4899", "#a855f7"][
+          Math.floor(Math.random() * 5)
+        ],
+      });
+    }
+
+    // Dynamic BGM tempo & intensity
+    sound.setBgmIntensity(state.bullStreak, isFeverActive);
 
     // Power-up timers
     if (state.magnetTimer > 0) {
@@ -576,8 +733,8 @@ export function GameCanvas() {
     player.onGround = false;
 
     // Platform side wall collision: prevent passing horizontally through candle bodies
-    // Threshold set to 14px so player landing on top near edge doesn't get snagged
     for (const platform of state.platforms) {
+      if (platform.cracked) continue;
       const py = platform.y + platform.sinkOffset;
       const candleBottom = py + platform.h;
       if (player.y + player.h > py + 14 && player.y < candleBottom) {
@@ -598,6 +755,7 @@ export function GameCanvas() {
     let supportY = Number.POSITIVE_INFINITY;
 
     for (const platform of state.platforms) {
+      if (platform.cracked) continue;
       const py = platform.y + platform.sinkOffset;
 
       // Platform foot check with ledge forgiveness margin (6px)
@@ -614,17 +772,49 @@ export function GameCanvas() {
     }
 
     if (supportPlatform) {
-      player.y = supportY - player.h;
-      player.vy = 0;
-      player.onGround = true;
-      player.canDoubleJump = true;
-      player.jumpSpin = 0;
+      // Fragile candle step trigger
+      if (
+        supportPlatform.type === "fragile" &&
+        supportPlatform.crackTimer === 0 &&
+        !supportPlatform.cracked
+      ) {
+        supportPlatform.crackTimer = 0.45;
+        sound.crackWarning();
+        haptic.warning();
+        state.screenShake = 0.2;
+      }
 
-      // Gentle corner nudge onto candle if on the outer edge
-      if (footCenter < supportPlatform.x + 3) {
-        player.x = Math.min(player.x + 2, supportPlatform.x);
-      } else if (footCenter > supportPlatform.x + supportPlatform.w - 3) {
-        player.x = Math.max(player.x - 2, supportPlatform.x + supportPlatform.w - player.w);
+      // Spring / Short Squeeze candle launch trigger!
+      if (supportPlatform.type === "spring" && !wasOnGround) {
+        player.vy = state.jumpPower * 1.48;
+        player.onGround = false;
+        player.canDoubleJump = true;
+        player.squashX = 0.65;
+        player.squashY = 1.45;
+        sound.springJump();
+        haptic.heavy();
+        state.screenShake = 0.25;
+        state.floatingTexts.push({
+          x: player.x,
+          y: player.y - 30,
+          text: "⚡ SHORT SQUEEZE! +🚀",
+          life: 1.6,
+          color: "#fbbf24",
+        });
+        spawnBurst(state.particles, player.x + player.w / 2, supportPlatform.y, 16, "#f59e0b", 2.0);
+      } else {
+        player.y = supportY - player.h;
+        player.vy = 0;
+        player.onGround = true;
+        player.canDoubleJump = true;
+        player.jumpSpin = 0;
+
+        // Gentle corner nudge onto candle if on the outer edge
+        if (footCenter < supportPlatform.x + 3) {
+          player.x = Math.min(player.x + 2, supportPlatform.x);
+        } else if (footCenter > supportPlatform.x + supportPlatform.w - 3) {
+          player.x = Math.max(player.x - 2, supportPlatform.x + supportPlatform.w - player.w);
+        }
       }
 
       if (!wasOnGround) {
@@ -640,9 +830,48 @@ export function GameCanvas() {
           0.75,
         );
 
+        // Check Perfect Center Landing
+        const platformCenter = supportPlatform.x + supportPlatform.w / 2;
+        const distFromCenter = Math.abs(footCenter - platformCenter);
+        if (distFromCenter < 9 && supportPlatform.type !== "spring") {
+          state.perfectCount += 1;
+          const perfectReward = 25 * state.multiplier;
+          state.dollars += perfectReward;
+          state.feverCharge = Math.min(100, state.feverCharge + 14);
+          sound.perfectLanding();
+          haptic.success();
+          state.floatingTexts.push({
+            x: player.x - 20,
+            y: player.y - 42,
+            text: `🎯 MÜKEMMEL İNİŞ! +$${perfectReward}`,
+            life: 1.4,
+            color: "#34d399",
+          });
+          spawnBurst(state.particles, footCenter, supportPlatform.y, 10, "#6ee7b7", 1.2);
+        }
+
         if (supportPlatform.bull) {
           state.bullStreak += 1;
-          if (state.bullStreak >= 10) {
+          state.feverCharge = Math.min(100, state.feverCharge + 6);
+
+          // Check Fever activation!
+          if (state.feverCharge >= 100 && state.feverTimer <= 0) {
+            state.feverTimer = 7.0;
+            state.feverCharge = 0;
+            sound.feverStart();
+            haptic.heavy();
+            state.screenShake = 0.4;
+            state.floatingTexts.push({
+              x: player.x - 40,
+              y: player.y - 50,
+              text: "🌟 BOĞA ÇILGINLIĞI (MOONSHOT)! x5",
+              life: 2.2,
+              color: "#fbbf24",
+            });
+            spawnBurst(state.particles, player.x + player.w / 2, player.y, 22, "#f59e0b", 2.2);
+          }
+
+          if (state.bullStreak >= 10 && !isFeverActive) {
             state.multiplier = 3;
             if (state.bullStreak === 10) {
               sound.frenzy();
@@ -657,7 +886,7 @@ export function GameCanvas() {
               });
               spawnBurst(state.particles, player.x + player.w / 2, player.y, 14, "#34d399", 1.8);
             }
-          } else if (state.bullStreak >= 5) {
+          } else if (state.bullStreak >= 5 && !isFeverActive) {
             state.multiplier = 2;
             if (state.bullStreak === 5) {
               sound.combo(5);
@@ -674,7 +903,16 @@ export function GameCanvas() {
           }
         } else {
           // Stepped on bear candle
-          if (state.hasShield) {
+          if (isFeverActive) {
+            // Invincible during fever!
+            state.floatingTexts.push({
+              x: player.x,
+              y: player.y - 25,
+              text: "⚡ BOĞA YIKTI GEÇTİ!",
+              life: 1.2,
+              color: "#fbbf24",
+            });
+          } else if (state.hasShield) {
             state.hasShield = false;
             sound.shield();
             haptic.success();
@@ -697,7 +935,7 @@ export function GameCanvas() {
         }
       }
 
-      if (!supportPlatform.bull && !state.hasShield) {
+      if (!supportPlatform.bull && !state.hasShield && !isFeverActive) {
         supportPlatform.sinkOffset = Math.min(20, supportPlatform.sinkOffset + 14 * dt);
         player.vx *= 0.96;
       }
@@ -729,7 +967,7 @@ export function GameCanvas() {
       item.bob += dt * 4.5;
       const dx = player.x + player.w / 2 - item.x;
       const dy = player.y + player.h / 2 - item.y;
-      const grabRadius = item.r + 18 + (state.magnetTimer > 0 ? 15 : 0);
+      const grabRadius = item.r + 18 + (state.magnetTimer > 0 || isFeverActive ? 25 : 0);
 
       if (dx * dx + dy * dy < grabRadius * grabRadius) {
         item.collected = true;
@@ -772,6 +1010,7 @@ export function GameCanvas() {
           // Dollar or Gold Coin
           const reward = item.value * state.multiplier;
           state.dollars += reward;
+          state.feverCharge = Math.min(100, state.feverCharge + (item.kind === "altin" ? 5 : 2));
 
           if (item.kind === "altin") {
             sound.gold();
@@ -811,13 +1050,26 @@ export function GameCanvas() {
     const abyssY = Math.max(530, canvasH + 20);
     if (player.y > abyssY) {
       // Find the closest platform right behind or near the fall point
-      const previousPlatforms = state.platforms.filter((p) => p.x <= player.x + 40);
+      const previousPlatforms = state.platforms.filter((p) => p.x <= player.x + 40 && !p.cracked);
       const target =
         previousPlatforms.length > 0
           ? previousPlatforms[previousPlatforms.length - 1]
           : state.platforms[0];
 
-      if (state.hasShield) {
+      if (isFeverActive) {
+        // Fever bounce rescue!
+        player.x = target.x + Math.max(6, Math.min(target.w - player.w - 6, 12));
+        player.y = target.y - player.h - 10;
+        player.vx = 0;
+        player.vy = -420;
+        state.floatingTexts.push({
+          x: player.x,
+          y: player.y - 25,
+          text: "⚡ BOĞA ÇILGINLIĞI KURTARDI!",
+          life: 1.5,
+          color: "#fbbf24",
+        });
+      } else if (state.hasShield) {
         // Shield saves from abyss fall!
         state.hasShield = false;
         sound.shield();
@@ -897,6 +1149,9 @@ export function GameCanvas() {
         hasShield: state.hasShield,
         magnetSeconds: Math.ceil(state.magnetTimer),
         rocketSeconds: Math.ceil(state.rocketTimer),
+        feverCharge: Math.floor(state.feverCharge),
+        feverSeconds: Math.ceil(state.feverTimer),
+        perfectLandings: state.perfectCount,
       });
     }
   };
@@ -904,6 +1159,7 @@ export function GameCanvas() {
   const endRun = () => {
     const state = stateRef.current;
     state.gameOver = true;
+    sound.stopBgm();
     addDollarsGlobal(state.dollars);
     recordRun(Math.floor(state.distance / 20), selectedCharId, state.dollars);
     setHud({
@@ -918,6 +1174,9 @@ export function GameCanvas() {
       hasShield: false,
       magnetSeconds: 0,
       rocketSeconds: 0,
+      feverCharge: 0,
+      feverSeconds: 0,
+      perfectLandings: state.perfectCount,
     });
   };
 
@@ -963,8 +1222,80 @@ export function GameCanvas() {
     const shakeX = shakeMagnitude > 0 ? (Math.random() - 0.5) * shakeMagnitude : 0;
     const shakeY = shakeMagnitude > 0 ? (Math.random() - 0.5) * shakeMagnitude : 0;
 
+    // --- Far Cyberpunk City Skyline (Parallax Layer 1) ---
+    ctx.save();
+    const skylineParallax = -(state.cameraX * 0.08);
+    ctx.translate((skylineParallax % 800) + shakeX * 0.2, shakeY * 0.2);
+    for (let loop = -1; loop <= 2; loop++) {
+      const offsetX = loop * 800;
+      state.cityBuildings.forEach((b) => {
+        const bx = offsetX + b.x;
+        const by = height - b.h;
+        // Skyscraper body
+        ctx.fillStyle = "rgba(15, 23, 42, 0.72)";
+        ctx.fillRect(bx, by, b.w, b.h);
+        ctx.strokeStyle = "rgba(56, 189, 248, 0.12)";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(bx, by, b.w, b.h);
+
+        // Windows
+        b.windows.forEach((w) => {
+          if (w.on) {
+            ctx.fillStyle =
+              (b.x + w.x) % 2 === 0 ? "rgba(251, 191, 36, 0.26)" : "rgba(56, 189, 248, 0.24)";
+            ctx.fillRect(bx + w.x, by + w.y, 4, 6);
+          }
+        });
+
+        // Rooftop antenna beacon
+        const beaconOn = Math.sin(now / 180 + b.x) > 0;
+        ctx.fillStyle = beaconOn ? "rgba(244, 63, 94, 0.9)" : "rgba(244, 63, 94, 0.2)";
+        ctx.fillRect(bx + b.w / 2 - 1, by - 6, 2, 6);
+
+        // Billboard
+        if (b.billboard) {
+          ctx.fillStyle = "rgba(16, 185, 129, 0.85)";
+          ctx.font = "bold 8px JetBrains Mono, monospace";
+          ctx.fillText(b.billboard, bx + 3, by + 16);
+        }
+      });
+    }
+    ctx.restore();
+
     ctx.save();
     ctx.translate(-state.cameraX + shakeX, shakeY);
+
+    // --- Flowing Exponential Moving Average (EMA) Ribbons (Layer 2) ---
+    ctx.save();
+    const screenStart = Math.max(0, state.cameraX - 120);
+    const screenEnd = state.cameraX + width + 120;
+
+    // EMA-20: Neon Cyan
+    ctx.strokeStyle = "rgba(56, 189, 248, 0.35)";
+    ctx.lineWidth = 2.5;
+    ctx.shadowColor = "rgba(56, 189, 248, 0.6)";
+    ctx.shadowBlur = 6;
+    ctx.beginPath();
+    for (let wx = screenStart; wx < screenEnd; wx += 35) {
+      const wy = 320 + Math.sin(wx * 0.005 + now * 0.001) * 55 + Math.cos(wx * 0.002) * 35;
+      if (wx === screenStart) ctx.moveTo(wx, wy);
+      else ctx.lineTo(wx, wy);
+    }
+    ctx.stroke();
+
+    // EMA-50: Neon Violet
+    ctx.strokeStyle = "rgba(168, 85, 247, 0.28)";
+    ctx.lineWidth = 2;
+    ctx.shadowColor = "rgba(168, 85, 247, 0.5)";
+    ctx.shadowBlur = 5;
+    ctx.beginPath();
+    for (let wx = screenStart; wx < screenEnd; wx += 35) {
+      const wy = 360 + Math.sin(wx * 0.003 - now * 0.0008) * 45 + Math.cos(wx * 0.004) * 40;
+      if (wx === screenStart) ctx.moveTo(wx, wy);
+      else ctx.lineTo(wx, wy);
+    }
+    ctx.stroke();
+    ctx.restore();
 
     // Ambient floating market embers/dust
     if (state.ambientDust) {
@@ -974,13 +1305,38 @@ export function GameCanvas() {
       });
     }
 
+    // Warp Speed Lines during Fever or Rocket
+    if (state.feverTimer > 0 || state.rocketTimer > 0 || Math.abs(state.player.vx) > 310) {
+      ctx.save();
+      ctx.strokeStyle =
+        state.feverTimer > 0 ? "rgba(251, 191, 36, 0.32)" : "rgba(255, 255, 255, 0.18)";
+      ctx.lineWidth = 1.8;
+      for (let i = 0; i < 14; i++) {
+        const lineX = state.cameraX + (((now * 2.2 + i * 90) % (width + 240)) - 120);
+        const lineY = (i * 41 + 60) % height;
+        ctx.beginPath();
+        ctx.moveTo(lineX, lineY);
+        ctx.lineTo(lineX - 50, lineY);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
     // Candlesticks
     state.platforms.forEach((platform) => {
+      if (platform.cracked) return;
       const y = platform.y + platform.sinkOffset;
       const isBull = platform.bull;
+      const isSpring = platform.type === "spring";
+      const isVolatile = platform.type === "volatile";
+      const isFragile = platform.type === "fragile";
 
       // Realistic glowing wick
-      ctx.strokeStyle = isBull ? "rgba(16, 185, 129, 0.9)" : "rgba(244, 63, 94, 0.9)";
+      ctx.strokeStyle = isSpring
+        ? "rgba(251, 191, 36, 0.95)"
+        : isBull
+          ? "rgba(16, 185, 129, 0.9)"
+          : "rgba(244, 63, 94, 0.9)";
       ctx.lineWidth = 2;
       ctx.lineCap = "round";
       ctx.beginPath();
@@ -988,14 +1344,14 @@ export function GameCanvas() {
       ctx.lineTo(platform.x + platform.w / 2, platform.wickBottom + platform.sinkOffset);
       ctx.stroke();
 
-      // Wick tip spark on bull candles
-      if (isBull) {
-        ctx.fillStyle = "#6ee7b7";
+      // Wick tip spark
+      if (isBull || isSpring) {
+        ctx.fillStyle = isSpring ? "#fef08a" : "#6ee7b7";
         ctx.beginPath();
         ctx.arc(
           platform.x + platform.w / 2,
           platform.wickTop + platform.sinkOffset,
-          2.2,
+          2.5,
           0,
           Math.PI * 2,
         );
@@ -1009,10 +1365,19 @@ export function GameCanvas() {
 
       // Candlestick body with ambient neon bloom
       ctx.save();
-      ctx.shadowColor = isBull ? "rgba(16, 185, 129, 0.45)" : "rgba(244, 63, 94, 0.38)";
-      ctx.shadowBlur = 8;
+      ctx.shadowColor = isSpring
+        ? "rgba(251, 191, 36, 0.65)"
+        : isBull
+          ? "rgba(16, 185, 129, 0.45)"
+          : "rgba(244, 63, 94, 0.38)";
+      ctx.shadowBlur = isSpring ? 12 : 8;
+
       const bodyGrad = ctx.createLinearGradient(0, y, 0, y + platform.h);
-      if (isBull) {
+      if (isSpring) {
+        bodyGrad.addColorStop(0, "#fbbf24");
+        bodyGrad.addColorStop(0.5, "#10b981");
+        bodyGrad.addColorStop(1, "#047857");
+      } else if (isBull) {
         bodyGrad.addColorStop(0, "#10b981");
         bodyGrad.addColorStop(0.5, "#059669");
         bodyGrad.addColorStop(1, "#047857");
@@ -1026,8 +1391,38 @@ export function GameCanvas() {
       ctx.fill();
       ctx.restore();
 
+      // Specialized Candle Type Overlays
+      if (isSpring) {
+        // Trampoline Spring Chevron
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "bold 11px JetBrains Mono, monospace";
+        ctx.textAlign = "center";
+        ctx.fillText("▲▲ SHORT SQUEEZE", platform.x + platform.w / 2, y + platform.h / 2 + 3.5);
+        ctx.textAlign = "left";
+      } else if (isVolatile) {
+        ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
+        ctx.font = "bold 9px JetBrains Mono, monospace";
+        ctx.textAlign = "center";
+        ctx.fillText("⚡ VOLATİL", platform.x + platform.w / 2, y + platform.h / 2 + 3);
+        ctx.textAlign = "left";
+      } else if (isFragile) {
+        ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+        ctx.font = "bold 9px JetBrains Mono, monospace";
+        ctx.textAlign = "center";
+        ctx.fillText(
+          platform.crackTimer > 0 ? "⚠️ ÇÖKÜYOR!" : "💥 KIRILGAN",
+          platform.x + platform.w / 2,
+          y + platform.h / 2 + 3,
+        );
+        ctx.textAlign = "left";
+      }
+
       // Subtle top highlight sheen
-      ctx.strokeStyle = isBull ? "rgba(255, 255, 255, 0.35)" : "rgba(255, 255, 255, 0.22)";
+      ctx.strokeStyle = isSpring
+        ? "rgba(255, 255, 255, 0.6)"
+        : isBull
+          ? "rgba(255, 255, 255, 0.35)"
+          : "rgba(255, 255, 255, 0.22)";
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(platform.x + 3, y + 1);
@@ -1038,7 +1433,7 @@ export function GameCanvas() {
     // Price tags under candles
     ctx.font = "600 10px JetBrains Mono, monospace";
     state.platforms.forEach((platform, i) => {
-      if (i % 6 !== 0) return;
+      if (platform.cracked || i % 6 !== 0) return;
       ctx.fillStyle = "rgba(148, 163, 184, 0.75)";
       ctx.fillText(platform.label, platform.x, platform.y + platform.h + 24);
       ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
@@ -1063,6 +1458,25 @@ export function GameCanvas() {
 
     // Player with power-up effects
     const player = state.player;
+
+    // Fever mode celestial aura
+    if (state.feverTimer > 0) {
+      ctx.save();
+      ctx.strokeStyle = "rgba(251, 191, 36, 0.85)";
+      ctx.lineWidth = 2.5;
+      ctx.shadowColor = "#f59e0b";
+      ctx.shadowBlur = 14;
+      ctx.beginPath();
+      ctx.arc(
+        player.x + player.w / 2,
+        player.y + player.h / 2,
+        32 + Math.sin(now / 90) * 4,
+        0,
+        Math.PI * 2,
+      );
+      ctx.stroke();
+      ctx.restore();
+    }
 
     // Shield aura
     if (state.hasShield) {
@@ -1134,6 +1548,7 @@ export function GameCanvas() {
 
   const restart = () => {
     sound.click();
+    sound.stopBgm();
     haptic.medium();
     setIsPaused(false);
     if (!hasStartedRun) return;
@@ -1218,8 +1633,26 @@ export function GameCanvas() {
           ))}
         </div>
 
-        {/* Active Power-up Badges */}
+        {/* Active Power-up Badges & Fever Gauge */}
         <div className="flex items-center gap-1.5">
+          {/* Fever / Moonshot Gauge */}
+          <div className="glass-low flex items-center gap-1.5 rounded-xl px-2 py-1 border border-amber-500/25">
+            <div className="relative h-2 w-14 overflow-hidden rounded-full bg-slate-800/80">
+              <div
+                className={
+                  "h-full transition-all duration-200 " +
+                  (hud.feverSeconds > 0
+                    ? "w-full bg-gradient-to-r from-amber-400 via-rose-500 to-emerald-400 animate-pulse"
+                    : "bg-gradient-to-r from-amber-500 to-emerald-400")
+                }
+                style={{ width: hud.feverSeconds > 0 ? "100%" : `${hud.feverCharge}%` }}
+              />
+            </div>
+            <span className="font-mono text-[9px] font-bold text-amber-400">
+              {hud.feverSeconds > 0 ? `FEVER ${hud.feverSeconds}s` : `${hud.feverCharge}%`}
+            </span>
+          </div>
+
           {hud.hasShield && (
             <div className="flex items-center gap-1 rounded-xl bg-sky-500/20 px-2 py-1 border border-sky-500/40 text-[10px] font-bold font-mono text-sky-400 animate-pulse">
               <Shield className="h-3 w-3" />
@@ -1239,7 +1672,14 @@ export function GameCanvas() {
             </div>
           )}
           {hud.multiplier > 1 && (
-            <div className="flex items-center gap-1 rounded-xl bg-emerald-500/20 px-2.5 py-1 border border-emerald-500/40 text-xs font-bold font-mono text-emerald-400">
+            <div
+              className={
+                "flex items-center gap-1 rounded-xl px-2.5 py-1 text-xs font-bold font-mono " +
+                (hud.feverSeconds > 0
+                  ? "bg-amber-500/30 border border-amber-400 text-amber-300 animate-bounce"
+                  : "bg-emerald-500/20 border border-emerald-500/40 text-emerald-400")
+              }
+            >
               <Zap className="h-3 w-3 fill-current" />
               <span>x{hud.multiplier}</span>
             </div>
@@ -1398,10 +1838,11 @@ export function GameCanvas() {
                 Koşu sona erdi, kazanç cüzdanına aktarıldı.
               </div>
 
-              <div className="mt-5 grid grid-cols-3 gap-2 font-mono text-xs">
+              <div className="mt-5 grid grid-cols-4 gap-1.5 font-mono text-xs">
                 <Result label="SÜRE" value={formatStopwatch(hud.elapsedMs)} />
                 <Result label="MESAFE" value={`${hud.distance}m`} />
                 <Result label="KAZANÇ" value={`$${hud.dollars}`} />
+                <Result label="MÜKEMMEL" value={`${hud.perfectLandings}x`} />
               </div>
 
               <div className="mt-5 flex flex-col gap-2.5">
