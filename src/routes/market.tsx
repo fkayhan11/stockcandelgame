@@ -139,19 +139,41 @@ function MarketPage() {
             <Cell label="BOĞA CARPANI" value="x3.0 Max" trend="up" />
           </div>
         </div>
+
+        {/* Financial & In-Game Simulation Disclaimer */}
+        <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-[11px] leading-relaxed text-amber-200/80">
+          <p className="font-semibold text-amber-300">ℹ️ Simülasyon Bilgilendirmesi:</p>
+          <p className="mt-0.5">
+            Döviz Bürosu tamamen oyun içi sanal varlık dönüşümüdür. Oyundaki Dolar ve $COIN
+            birimlerinin herhangi bir gerçek para veya kripto para karşılığı yoktur; çekim yapılamaz
+            ve yatırım tavsiyesi içermez.
+          </p>
+        </div>
       </div>
     </AppShell>
   );
 }
 
-function Cell({ label, value, trend }: { label: string; value: string; trend: "up" | "down" | "neutral" }) {
+function Cell({
+  label,
+  value,
+  trend,
+}: {
+  label: string;
+  value: string;
+  trend: "up" | "down" | "neutral";
+}) {
   return (
     <div className="p-3">
       <div className="text-[10px] text-muted-foreground">{label}</div>
       <div
         className={
           "mt-1 font-bold " +
-          (trend === "up" ? "text-emerald-400" : trend === "down" ? "text-rose-400" : "text-amber-400")
+          (trend === "up"
+            ? "text-emerald-400"
+            : trend === "down"
+              ? "text-rose-400"
+              : "text-amber-400")
         }
       >
         {value}

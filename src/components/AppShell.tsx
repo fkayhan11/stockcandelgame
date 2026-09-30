@@ -55,7 +55,11 @@ export function AppShell({
               title={muted ? "Sesi Aç" : "Sesi Kapat"}
               aria-label="Ses kontrolü"
             >
-              {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4 text-primary" />}
+              {muted ? (
+                <VolumeX className="h-4 w-4" />
+              ) : (
+                <Volume2 className="h-4 w-4 text-primary" />
+              )}
             </button>
 
             <div className="wallet-pill glass-low flex items-center gap-2.5 rounded-xl px-3 py-1.5">

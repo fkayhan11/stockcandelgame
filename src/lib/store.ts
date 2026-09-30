@@ -1,9 +1,10 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { persist, createJSONStorage } from "zustand/middleware";
 import { CHARACTERS } from "./game-data";
+import { secureStorage, validateRunReward, clampSafeInteger } from "./security";
 
 type State = {
-  dollars: number; // raw dollars collected
+  dollars: number; // raw dollars collected in runs
   coin: number; // $COIN currency (100 dollars = 1 coin)
   highScore: number;
   totalWealth: number;
@@ -37,38 +38,73 @@ export const useGameStore = create<State>()(
       selectedCharacter: "elanus",
       selectedSkins: initialSkins,
       ownedSkins: initialOwned,
-      addDollars: (n) => set((s) => ({ dollars: s.dollars + n })),
-      exchange: (dollars) =>
+
+      addDollars: (n) => {
+        const safeN = clampSafeInteger(n, 0, 500_000);
+        if (safeN <= 0) return;
+        set((s) => ({ dollars: clampSafeInteger(s.dollars + safeN, 0, 1_000_000_000) }));
+      },
+
+      exchange: (dollars) => {
         set((s) => {
-          const amt = Math.min(s.dollars, Math.max(0, Math.floor(dollars)));
-          const coins = Math.floor(amt / 100);
+          const safeAmt = clampSafeInteger(dollars, 0, s.dollars);
+          const coins = Math.floor(safeAmt / 100);
           const used = coins * 100;
-          return { dollars: s.dollars - used, coin: s.coin + coins };
-        }),
-      selectCharacter: (id) => set({ selectedCharacter: id }),
-      selectSkin: (charId, skinId) =>
-        set((s) => ({ selectedSkins: { ...s.selectedSkins, [charId]: skinId } })),
+          return {
+            dollars: Math.max(0, s.dollars - used),
+            coin: clampSafeInteger(s.coin + coins, 0, 1_000_000_000),
+          };
+        });
+      },
+
+      selectCharacter: (id) => {
+        if (!CHARACTERS.some((c) => c.id === id)) return;
+        set({ selectedCharacter: id });
+      },
+
+      selectSkin: (charId, skinId) => {
+        const owned = get().ownedSkins[charId] || [];
+        if (!owned.includes(skinId)) return;
+        set((s) => ({ selectedSkins: { ...s.selectedSkins, [charId]: skinId } }));
+      },
+
       buySkin: (charId, skinId, cost) => {
         const s = get();
-        if (s.coin < cost) return false;
+        const safeCost = clampSafeInteger(cost, 0, 1_000_000);
+        if (s.coin < safeCost) return false;
+
         const owned = s.ownedSkins[charId] || [];
         if (owned.includes(skinId)) return true;
+
         set({
-          coin: s.coin - cost,
+          coin: Math.max(0, s.coin - safeCost),
           ownedSkins: { ...s.ownedSkins, [charId]: [...owned, skinId] },
         });
         return true;
       },
-      recordRun: (distance, charId, dollarsEarned) =>
+
+      recordRun: (distance, charId, dollarsEarned) => {
+        const safeDist = clampSafeInteger(distance, 0, 100_000);
+        const safeEarned = clampSafeInteger(dollarsEarned, 0, 10_000_000);
+
+        // Anti-cheat verification
+        if (!validateRunReward(safeDist, safeEarned)) {
+          return;
+        }
+
         set((s) => ({
-          highScore: Math.max(s.highScore, distance),
-          totalWealth: s.totalWealth + dollarsEarned,
+          highScore: Math.max(s.highScore, safeDist),
+          totalWealth: clampSafeInteger(s.totalWealth + safeEarned, 0, 2_000_000_000),
           characterRecords: {
             ...s.characterRecords,
-            [charId]: Math.max(s.characterRecords[charId] || 0, distance),
+            [charId]: Math.max(s.characterRecords[charId] || 0, safeDist),
           },
-        })),
+        }));
+      },
     }),
-    { name: "block-jumper-store-v1" },
+    {
+      name: "bj_profile_v2",
+      storage: createJSONStorage(() => secureStorage),
+    },
   ),
 );

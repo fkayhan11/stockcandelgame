@@ -6,6 +6,7 @@ import { useGameStore } from "@/lib/store";
 import { Play, ChevronRight, Trophy, Zap, ShieldAlert } from "lucide-react";
 import { sound } from "@/lib/audio";
 import { haptic } from "@/lib/haptics";
+import { LegalNoticeModal } from "@/components/LegalNoticeModal";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -64,7 +65,9 @@ function Home() {
                 <div className="mt-1 font-display text-2xl font-bold text-white">
                   {character.name}
                 </div>
-                <div className="text-xs text-muted-foreground">{character.title} · {character.industry}</div>
+                <div className="text-xs text-muted-foreground">
+                  {character.title} · {character.industry}
+                </div>
               </div>
               <Link
                 to="/skins"
@@ -131,9 +134,14 @@ function Home() {
 
         {/* Economy summary */}
         <div className="glass-low mt-2.5 flex items-center justify-between rounded-xl px-4 py-2.5 text-xs text-muted-foreground">
-          <span>Toplanan her <strong>100 Dolar</strong></span>
+          <span>
+            Toplanan her <strong>100 Dolar</strong>
+          </span>
           <span className="font-mono font-bold text-amber-400">= 1 $COIN</span>
         </div>
+
+        {/* Legal & Privacy Compliance */}
+        <LegalNoticeModal />
       </div>
     </AppShell>
   );

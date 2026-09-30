@@ -31,7 +31,7 @@ export const CHARACTERS: Character[] = [
         bgGradient: "radial-gradient(circle at 30% 30%, #ff5e5e, #7a1a3c, #0f131e)",
       },
       {
-        id: "tesla",
+        id: "volt",
         name: "Volt Sürücü",
         cost: 1200,
         bgGradient: "radial-gradient(circle at 30% 30%, #b51bff, #2b0a6b, #0f131e)",

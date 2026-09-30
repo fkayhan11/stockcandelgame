@@ -59,10 +59,16 @@ function StatsPage() {
             </div>
             <div>
               <div className="text-xs font-bold text-white">
-                {highScore >= 1000 ? "Wall Street Efsanesi" : highScore >= 500 ? "Kıdemli Fon Yöneticisi" : "Piyasa Çırağı"}
+                {highScore >= 1000
+                  ? "Wall Street Efsanesi"
+                  : highScore >= 500
+                    ? "Kıdemli Fon Yöneticisi"
+                    : "Piyasa Çırağı"}
               </div>
               <div className="text-[10px] text-muted-foreground">
-                {highScore >= 1000 ? "Tüm zamanların en iyi koşucusu" : "1000m hedefine ulaşmak için koş"}
+                {highScore >= 1000
+                  ? "Tüm zamanların en iyi koşucusu"
+                  : "1000m hedefine ulaşmak için koş"}
               </div>
             </div>
           </div>
@@ -122,9 +128,7 @@ function StatTile({
         {icon}
         <span className="font-mono text-[9px] font-semibold tracking-wider">{label}</span>
       </div>
-      <div className={"mt-1.5 font-mono text-sm font-bold truncate " + valueColor}>
-        {value}
-      </div>
+      <div className={"mt-1.5 font-mono text-sm font-bold truncate " + valueColor}>{value}</div>
     </div>
   );
 }

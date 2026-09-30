@@ -312,7 +312,8 @@ export function GameCanvas() {
       const rawH = Math.abs(priceToY(candle.o) - priceToY(candle.c));
       const h = Math.max(38, Math.min(100, rawH * 0.6 + 28));
       const wickTop = bodyTop - Math.min(42, Math.abs(priceToY(candle.h) - rawTargetY) * 0.4 + 16);
-      const wickBottom = bodyTop + h + Math.min(42, Math.abs(priceToY(candle.l) - rawTargetY) * 0.4 + 16);
+      const wickBottom =
+        bodyTop + h + Math.min(42, Math.abs(priceToY(candle.l) - rawTargetY) * 0.4 + 16);
       const w = Math.max(72, tf.candleWidth * (0.95 + deterministicWave(i, 0.12)));
       const gap = Math.max(28, Math.min(48, tf.gap * (0.9 + deterministicWave(i + 11, 0.18))));
 
@@ -549,10 +550,8 @@ export function GameCanvas() {
       const onPlatform = footCenter >= platform.x && footCenter <= platform.x + platform.w;
       if (!onPlatform) continue;
 
-      const crossedTop =
-        player.vy >= 0 && previousBottom <= py + 12 && currentBottom >= py;
-      const alreadyStanding =
-        wasOnGround && Math.abs(currentBottom - py) <= 8 && player.vy >= -30;
+      const crossedTop = player.vy >= 0 && previousBottom <= py + 12 && currentBottom >= py;
+      const alreadyStanding = wasOnGround && Math.abs(currentBottom - py) <= 8 && player.vy >= -30;
 
       if ((crossedTop || alreadyStanding) && py < supportY) {
         supportPlatform = platform;
@@ -949,7 +948,13 @@ export function GameCanvas() {
       ctx.lineWidth = 2;
       ctx.setLineDash([4, 4]);
       ctx.beginPath();
-      ctx.arc(player.x + player.w / 2, player.y + player.h / 2, 28 + Math.sin(now / 180) * 2, 0, Math.PI * 2);
+      ctx.arc(
+        player.x + player.w / 2,
+        player.y + player.h / 2,
+        28 + Math.sin(now / 180) * 2,
+        0,
+        Math.PI * 2,
+      );
       ctx.stroke();
       ctx.restore();
     }
@@ -960,7 +965,13 @@ export function GameCanvas() {
       ctx.strokeStyle = "rgba(251, 191, 36, 0.35)";
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.arc(player.x + player.w / 2, player.y + player.h / 2, 45 + Math.sin(now / 120) * 8, 0, Math.PI * 2);
+      ctx.arc(
+        player.x + player.w / 2,
+        player.y + player.h / 2,
+        45 + Math.sin(now / 120) * 8,
+        0,
+        Math.PI * 2,
+      );
       ctx.stroke();
       ctx.restore();
     }
@@ -1115,7 +1126,11 @@ export function GameCanvas() {
               className="glass-low grid h-8 w-8 place-items-center rounded-xl text-muted-foreground hover:text-white active:scale-95 transition-all border border-white/8"
               aria-label="Duraklat"
             >
-              {isPaused ? <Play className="h-3.5 w-3.5 fill-current" /> : <Pause className="h-3.5 w-3.5" />}
+              {isPaused ? (
+                <Play className="h-3.5 w-3.5 fill-current" />
+              ) : (
+                <Pause className="h-3.5 w-3.5" />
+              )}
             </button>
           )}
 
@@ -1133,7 +1148,11 @@ export function GameCanvas() {
             onClick={() => {
               sound.click();
               haptic.light();
-              hasStartedRun ? setTimeframe(tf) : setDraftTimeframe(tf);
+              if (hasStartedRun) {
+                setTimeframe(tf);
+              } else {
+                setDraftTimeframe(tf);
+              }
             }}
             className={
               "rounded-lg py-1.5 text-center font-mono text-xs font-bold transition-all " +
@@ -1189,9 +1208,7 @@ export function GameCanvas() {
           <div className="absolute inset-0 z-30 grid place-items-center bg-black/75 backdrop-blur-md p-4">
             <div className="glass w-full max-w-[320px] rounded-2xl p-6 text-center border border-white/10 shadow-2xl">
               <div className="font-display text-xl font-bold text-white">OYUN DURAKLATILDI</div>
-              <div className="mt-1 text-xs text-muted-foreground">
-                Mevcut koşun donduruldu.
-              </div>
+              <div className="mt-1 text-xs text-muted-foreground">Mevcut koşun donduruldu.</div>
 
               <div className="mt-4 grid grid-cols-2 gap-2 font-mono text-xs">
                 <Result label="MESAFE" value={`${hud.distance}m`} />
@@ -1218,7 +1235,11 @@ export function GameCanvas() {
                     onClick={toggleMuteInGame}
                     className="glass-low flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-semibold text-muted-foreground hover:text-white active:scale-95 transition-all border border-white/8"
                   >
-                    {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4 text-emerald-400" />}
+                    {isMuted ? (
+                      <VolumeX className="h-4 w-4" />
+                    ) : (
+                      <Volume2 className="h-4 w-4 text-emerald-400" />
+                    )}
                     <span>{isMuted ? "Sesi Aç" : "Sesi Kapat"}</span>
                   </button>
 
@@ -1288,7 +1309,9 @@ export function GameCanvas() {
             <div className="absolute inset-x-3 top-3 bottom-3 glass flex flex-col overflow-hidden rounded-2xl border border-white/10">
               <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
                 <div>
-                  <div className="font-display text-base font-bold text-white">60 Hacimli Hisse</div>
+                  <div className="font-display text-base font-bold text-white">
+                    60 Hacimli Hisse
+                  </div>
                   <div className="font-mono text-xs text-muted-foreground">
                     Seçilen hisse için {timeframe.label} verisi çekilir
                   </div>
@@ -1338,9 +1361,7 @@ export function GameCanvas() {
                           <div className="font-mono text-xs font-bold">{symbol.symbol}</div>
                           <div className="text-[11px] text-muted-foreground">{symbol.name}</div>
                         </div>
-                        <div className="font-mono text-[10px] text-muted-foreground">
-                          CANLI
-                        </div>
+                        <div className="font-mono text-[10px] text-muted-foreground">CANLI</div>
                       </button>
                     );
                   })}

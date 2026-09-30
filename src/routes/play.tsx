@@ -50,7 +50,11 @@ function PlayPage() {
           title={muted ? "Sesi Aç" : "Sesi Kapat"}
           aria-label="Ses kontrolü"
         >
-          {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4 text-emerald-400" />}
+          {muted ? (
+            <VolumeX className="h-4 w-4" />
+          ) : (
+            <Volume2 className="h-4 w-4 text-emerald-400" />
+          )}
         </button>
       </header>
       <GameCanvas />

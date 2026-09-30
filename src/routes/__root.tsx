@@ -10,7 +10,7 @@ import {
 import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
-import { reportLovableError } from "../lib/lovable-error-reporting";
+import { logger } from "../lib/logger";
 
 function NotFoundComponent() {
   return (
@@ -40,15 +40,13 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
   console.error(error);
   const router = useRouter();
   useEffect(() => {
-    reportLovableError(error as Error, { boundary: "tanstack_root_error_component" });
+    logger.error(error as Error, { boundary: "root_error_component" });
   }, [error]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          Bir sorun oluştu
-        </h1>
+        <h1 className="text-xl font-semibold tracking-tight text-foreground">Bir sorun oluştu</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           Bağlantı veya piyasa verisinde bir aksaklık oldu. Yeniden deneyebilirsiniz.
         </p>
@@ -86,12 +84,16 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { title: "Block Jumper — Mum Koşusu" },
       {
         name: "description",
-        content: "Gerçek borsa mumlarında zıpla, dolar topla, $COIN kazan. 100K oyuncu kapasiteli piyasa platformu.",
+        content:
+          "Gerçek borsa mumlarında zıpla, dolar topla, $COIN kazan. 100K oyuncu kapasiteli piyasa platformu.",
       },
       { name: "theme-color", content: "#0b0f19" },
       { name: "apple-mobile-web-app-capable", content: "yes" },
       { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
       { name: "mobile-web-app-capable", content: "yes" },
+      { name: "referrer", content: "strict-origin-when-cross-origin" },
+      { httpEquiv: "X-Content-Type-Options", content: "nosniff" },
+      { httpEquiv: "X-Frame-Options", content: "DENY" },
     ],
     links: [
       { rel: "manifest", href: "/manifest.json" },
@@ -125,8 +127,14 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+import { initMobileApp } from "../lib/mobile-init";
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+
+  useEffect(() => {
+    initMobileApp();
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>

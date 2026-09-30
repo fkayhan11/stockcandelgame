@@ -37,9 +37,7 @@ function SkinsPage() {
   return (
     <AppShell>
       <div className="px-5 pt-4">
-        <h1 className="font-display text-2xl font-bold text-white">
-          Kahramanını Seç
-        </h1>
+        <h1 className="font-display text-2xl font-bold text-white">Kahramanını Seç</h1>
         <p className="mt-1 font-mono text-xs uppercase tracking-wider text-muted-foreground">
           Piyasa koşusunda kullanacağın portföy liderini seç
         </p>
@@ -191,15 +189,12 @@ function CharacterCard({
       <div className="mt-1.5 text-center">
         <div
           className={
-            "font-display text-sm font-bold " +
-            (isSelected ? "text-emerald-400" : "text-white")
+            "font-display text-sm font-bold " + (isSelected ? "text-emerald-400" : "text-white")
           }
         >
           {character.name}
         </div>
-        <div className="font-mono text-[10px] text-muted-foreground">
-          {skin.name}
-        </div>
+        <div className="font-mono text-[10px] text-muted-foreground">{skin.name}</div>
         <div className="mt-1.5 flex flex-wrap items-center justify-center gap-1">
           <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 font-mono text-[8px] uppercase tracking-wider text-slate-300">
             {seriesLabel}

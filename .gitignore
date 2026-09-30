@@ -30,3 +30,20 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Android native build ignores
+android/app/build
+android/build
+android/.gradle
+android/captures
+android/local.properties
+android/.idea
+*.iml
+
+# iOS native build ignores
+ios/App/Pods
+ios/App/build
+ios/App/.build
+*.xcuserdata
+*.xcworkspace/xcuserdata
+

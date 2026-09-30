@@ -18,8 +18,7 @@ async function getServerEntry(): Promise<ServerEntry> {
   return serverEntryPromise;
 }
 
-// h3 swallows in-handler throws into a normal 500 Response with body
-// {"unhandled":true,"message":"HTTPError"} — try/catch alone never fires for those.
+// Format unhandled SSR responses into a graceful error page
 async function normalizeCatastrophicSsrResponse(response: Response): Promise<Response> {
   if (response.status < 500) return response;
   const contentType = response.headers.get("content-type") ?? "";
@@ -42,6 +41,16 @@ export default {
     const url = new URL(request.url);
     if (url.pathname.startsWith("/api/yahoo/")) {
       const targetPath = url.pathname.replace(/^\/api\/yahoo\//, "");
+      // Security: Strictly whitelist permitted finance chart endpoints (Anti-SSRF & Path Traversal Guard)
+      if (!/^v8\/finance\/chart\/[a-zA-Z0-9.\-_=^%]+$/.test(targetPath)) {
+        return new Response(
+          JSON.stringify({ error: "Access denied: Invalid finance query parameter" }),
+          {
+            status: 400,
+            headers: { "content-type": "application/json" },
+          },
+        );
+      }
       const yahooUrl = `https://query1.finance.yahoo.com/${targetPath}${url.search}`;
       try {
         const res = await fetch(yahooUrl, {

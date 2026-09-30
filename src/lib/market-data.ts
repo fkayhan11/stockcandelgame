@@ -290,7 +290,8 @@ function generateRealHistoricalCompanyCandles(
   for (let i = 0; i < count; i += 1) {
     const progress = i / count;
     // Macro cyclical market wave + company growth trajectory
-    const cyclical = Math.sin(progress * Math.PI * 3.5) * (profile.startPrice * profile.volatility * 1.8);
+    const cyclical =
+      Math.sin(progress * Math.PI * 3.5) * (profile.startPrice * profile.volatility * 1.8);
     const stepTarget = profile.startPrice + targetTrendPerStep * i + cyclical;
 
     const o = currentPrice;

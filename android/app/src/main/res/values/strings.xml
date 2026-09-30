@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Block Jumper: Mum Koşusu</string>
+    <string name="title_activity_main">Block Jumper: Mum Koşusu</string>
+    <string name="package_name">com.tradetalestrek.blockjumper</string>
+    <string name="custom_url_scheme">com.tradetalestrek.blockjumper</string>
+</resources>
