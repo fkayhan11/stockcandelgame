@@ -1824,13 +1824,26 @@ export function GameCanvas() {
   };
 
   return (
-    <div className="relative flex h-[calc(100dvh-72px)] flex-col px-3 pb-3">
-      {/* Sleek Unified Top HUD Header */}
-      <div className="flex items-center justify-between gap-2 py-2">
-        {/* Left: Hearts & Stock Ticker Badge */}
-        <div className="flex items-center gap-1.5 sm:gap-2">
+    <div className="relative flex h-full w-full flex-col px-3 pt-2 pb-3">
+      {/* Sleek Native Top HUD Header */}
+      <div className="flex items-center justify-between gap-1.5 sm:gap-2 pb-2">
+        {/* Left: Home Exit Button + Hearts + Stock Ticker */}
+        <div className="flex items-center gap-1 sm:gap-1.5">
+          <Link
+            to="/"
+            onClick={() => {
+              sound.click();
+              haptic.light();
+            }}
+            className="glass-low grid h-8 w-8 place-items-center rounded-xl text-muted-foreground hover:text-white hover:bg-white/10 active:scale-95 transition-all border border-white/8 shadow-sm"
+            title="Ana Menüye Dön"
+            aria-label="Ana Menü"
+          >
+            <Home className="h-4 w-4" />
+          </Link>
+
           {/* Hearts */}
-          <div className="glass-low flex items-center gap-1 sm:gap-1.5 rounded-xl px-2.5 py-1.5 border border-white/8 shadow-sm">
+          <div className="glass-low flex items-center gap-1 rounded-xl px-2 py-1.5 border border-white/8 shadow-sm">
             {[0, 1, 2].map((i) => (
               <Heart
                 key={i}
@@ -1851,20 +1864,17 @@ export function GameCanvas() {
               haptic.light();
               setSelectorOpen(true);
             }}
-            className="glass-low flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 border border-white/8 text-xs font-mono font-bold hover:bg-white/5 active:scale-95 transition-all shadow-sm"
+            className="glass-low flex items-center gap-1 rounded-xl px-2.5 py-1.5 border border-white/8 text-xs font-mono font-bold hover:bg-white/5 active:scale-95 transition-all shadow-sm"
             title="Hisse Değiştir"
           >
             <span className="text-emerald-400 font-extrabold">{currentSymbol.symbol}</span>
-            <span className="hidden sm:inline text-muted-foreground font-normal text-[11px]">
-              · {currentSymbol.name}
-            </span>
           </button>
         </div>
 
         {/* Center: Bull Peak Progress Bar */}
         <div className="glass-low flex items-center gap-1.5 sm:gap-2 rounded-xl px-2.5 py-1.5 border border-white/8 font-mono text-[11px] shadow-sm">
           <Flag className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-amber-400 shrink-0" />
-          <div className="relative h-1.5 w-12 sm:w-24 overflow-hidden rounded-full bg-slate-800">
+          <div className="relative h-1.5 w-12 sm:w-20 overflow-hidden rounded-full bg-slate-800">
             <div
               className="h-full bg-gradient-to-r from-emerald-500 via-teal-400 to-amber-400 transition-all duration-300"
               style={{
@@ -1872,38 +1882,48 @@ export function GameCanvas() {
               }}
             />
           </div>
-          <span className="text-white font-bold text-[10px] sm:text-[11px]">
-            {hud.distance}m
-            <span className="text-muted-foreground hidden sm:inline">/{hud.finishMeters}m</span>
-          </span>
+          <span className="text-white font-bold text-[10px] sm:text-[11px]">{hud.distance}m</span>
         </div>
 
-        {/* Right: Dollars + Stopwatch + Trophy + Pause */}
-        <div className="flex items-center gap-1.5">
-          <div className="glass-low hidden xs:flex items-center rounded-xl px-2 py-1.5 font-mono text-xs font-black text-emerald-400 border border-emerald-500/20 shadow-sm">
-            +${hud.dollars}
-          </div>
+        {/* Right: Sound Toggle + Stopwatch + Trophy + Pause */}
+        <div className="flex items-center gap-1 sm:gap-1.5">
+          {/* Sound Toggle */}
+          <button
+            onClick={toggleMuteInGame}
+            className="glass-low grid h-8 w-8 place-items-center rounded-xl text-muted-foreground hover:text-white active:scale-95 transition-all border border-white/8 shadow-sm"
+            title={isMuted ? "Sesi Aç" : "Sesi Kapat"}
+            aria-label="Ses"
+          >
+            {isMuted ? (
+              <VolumeX className="h-3.5 w-3.5 text-slate-500" />
+            ) : (
+              <Volume2 className="h-3.5 w-3.5 text-emerald-400" />
+            )}
+          </button>
 
-          <div className="glass-low rounded-xl px-2 py-1.5 text-center font-mono text-xs font-bold text-white border border-white/8 shadow-sm">
+          {/* Stopwatch */}
+          <div className="glass-low hidden xs:block rounded-xl px-2 py-1.5 text-center font-mono text-xs font-bold text-white border border-white/8 shadow-sm">
             {formatStopwatch(hud.elapsedMs)}
           </div>
 
+          {/* Daily Speedrun Leaderboard */}
           <button
             onClick={() => {
               sound.click();
               haptic.light();
               setLeaderboardModalOpen(true);
             }}
-            className="glass-low grid h-7 w-7 sm:h-8 sm:w-8 place-items-center rounded-xl text-amber-400 border border-amber-500/25 hover:bg-amber-500/10 active:scale-95 transition-all shadow-sm"
+            className="glass-low grid h-8 w-8 place-items-center rounded-xl text-amber-400 border border-amber-500/25 hover:bg-amber-500/10 active:scale-95 transition-all shadow-sm"
             title="Günün En Hızlıları"
           >
             <Trophy className="h-3.5 w-3.5" />
           </button>
 
+          {/* Pause / Play */}
           {hasStartedRun && !hud.gameOver && (
             <button
               onClick={togglePause}
-              className="glass-low grid h-7 w-7 sm:h-8 sm:w-8 place-items-center rounded-xl text-muted-foreground hover:text-white active:scale-95 transition-all border border-white/8 shadow-sm"
+              className="glass-low grid h-8 w-8 place-items-center rounded-xl text-muted-foreground hover:text-white active:scale-95 transition-all border border-white/8 shadow-sm"
               aria-label="Duraklat"
             >
               {isPaused ? (
@@ -2030,7 +2050,7 @@ export function GameCanvas() {
         {hud.gameOver && hud.isVictory && (
           <div className="absolute inset-0 z-40 grid place-items-center bg-black/80 backdrop-blur-md p-3 overflow-y-auto">
             <div className="glass w-full max-w-[360px] rounded-2xl p-5 text-center border border-amber-500/30 shadow-2xl my-auto">
-              <div className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/20 px-3 py-1 text-xs font-bold text-amber-400 border border-amber-500/30 animate-pulse">
+              <div className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/20 px-3 py-1 text-xs font-bold text-amber-400 border border-amber-500/30">
                 <Trophy className="h-4 w-4" /> BOĞA ZİRVESİNE ULAŞILDI!
               </div>
 
@@ -2159,7 +2179,7 @@ export function GameCanvas() {
           <div className="absolute inset-0 grid place-items-center bg-black/75 backdrop-blur-md p-4">
             <div className="glass w-full max-w-[320px] rounded-2xl p-6 text-center border border-white/10 shadow-2xl">
               {hud.isNewRecord && (
-                <div className="mb-2 inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-3 py-1 text-xs font-bold text-amber-400 border border-amber-500/30 animate-bounce">
+                <div className="mb-2 inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-3 py-1 text-xs font-bold text-amber-400 border border-amber-500/30">
                   🏆 YENİ EN İYİ SKOR!
                 </div>
               )}
@@ -2292,12 +2312,12 @@ export function GameCanvas() {
           <div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-center">
             <div className="flex items-center gap-1.5">
               {hud.feverSeconds > 0 ? (
-                <div className="glass flex items-center gap-1.5 rounded-full px-4 py-1.5 border border-amber-400/50 bg-amber-500/20 text-amber-300 font-mono text-xs font-extrabold shadow-lg shadow-amber-500/20 animate-pulse">
+                <div className="glass flex items-center gap-1.5 rounded-full px-4 py-1.5 border border-amber-400/50 bg-amber-500/20 text-amber-300 font-mono text-xs font-extrabold shadow-lg shadow-amber-500/20">
                   <Zap className="h-3.5 w-3.5 fill-current text-amber-400" />
                   <span>BOĞA ÇILGINLIĞI x5 · {hud.feverSeconds}s</span>
                 </div>
               ) : hud.rocketSeconds > 0 ? (
-                <div className="glass flex items-center gap-1.5 rounded-full px-4 py-1.5 border border-orange-500/40 bg-orange-500/20 text-orange-300 font-mono text-xs font-extrabold shadow-lg shadow-orange-500/20 animate-bounce">
+                <div className="glass flex items-center gap-1.5 rounded-full px-4 py-1.5 border border-orange-500/40 bg-orange-500/20 text-orange-300 font-mono text-xs font-extrabold shadow-lg shadow-orange-500/20">
                   <Flame className="h-3.5 w-3.5 text-orange-400" />
                   <span>BOĞA ROKETİ · {hud.rocketSeconds}s</span>
                 </div>
@@ -2517,7 +2537,7 @@ export function GameCanvas() {
           className="relative flex h-14 flex-1 items-center justify-center gap-2 rounded-2xl border border-emerald-400/40 bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500 text-white shadow-lg shadow-emerald-950/40 active:brightness-90 active:scale-[0.98] transition-all"
           aria-label="Zıpla"
         >
-          <ChevronsUp className="h-5 w-5 animate-pulse" />
+          <ChevronsUp className="h-5 w-5" />
           <div className="flex flex-col items-start leading-none">
             <span className="font-display text-sm font-extrabold tracking-wider">ZIPLA</span>
             <span className="font-mono text-[9px] text-emerald-100/75 hidden sm:block">
