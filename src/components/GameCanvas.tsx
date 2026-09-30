@@ -32,10 +32,16 @@ import {
   Volume2,
   VolumeX,
   Home,
+  Trophy,
+  Medal,
+  Flag,
+  Award,
+  Clock,
 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
+import type { DailySpeedrunRecord } from "@/lib/store";
 
-type PlatformType = "normal" | "volatile" | "spring" | "fragile";
+type PlatformType = "normal" | "volatile" | "spring" | "fragile" | "finish";
 
 type Platform = {
   x: number;
@@ -53,6 +59,7 @@ type Platform = {
   crackTimer: number;
   cracked: boolean;
   sinePhase: number;
+  isFinish?: boolean;
 };
 
 type CollectibleKind = "dolar" | "altin" | "kalkan" | "miknatis" | "roket";
@@ -109,11 +116,15 @@ export function GameCanvas() {
   const [isMuted, setIsMuted] = useState(() => sound.muted);
   const [search, setSearch] = useState("");
   const [copiedShare, setCopiedShare] = useState(false);
+  const [leaderboardModalOpen, setLeaderboardModalOpen] = useState(false);
   const [hud, setHud] = useState({
     lives: 3,
     dollars: 0,
     distance: 0,
     gameOver: false,
+    isVictory: false,
+    speedrunRank: null as number | null,
+    finishMeters: 450,
     elapsedMs: 0,
     streak: 0,
     multiplier: 1,
@@ -130,7 +141,10 @@ export function GameCanvas() {
   const selectedSkinId = useGameStore((s) => s.selectedSkins[selectedCharId] || "base");
   const character = CHARACTERS.find((c) => c.id === selectedCharId) || CHARACTERS[0];
   const addDollarsGlobal = useGameStore((s) => s.addDollars);
+  const addCoinGlobal = useGameStore((s) => s.addCoin);
   const recordRun = useGameStore((s) => s.recordRun);
+  const recordSpeedrunGlobal = useGameStore((s) => s.recordSpeedrun);
+  const getTodayLeaderboardGlobal = useGameStore((s) => s.getTodayLeaderboard);
   const highScore = useGameStore((s) => s.highScore);
   const characterRef = useRef(character);
   const skinIdRef = useRef(selectedSkinId);
@@ -142,6 +156,10 @@ export function GameCanvas() {
     dollars: 0,
     distance: 0,
     gameOver: false,
+    isVictory: false,
+    completed: false,
+    finishX: 0,
+    finishMeters: 450,
     cameraX: 0,
     bullStreak: 0,
     multiplier: 1,
@@ -330,7 +348,11 @@ export function GameCanvas() {
     let cursorX = 56;
     let currentY = 360;
 
-    candles.forEach((candle, i) => {
+    const maxLevelCandles = Math.min(80, candles.length);
+    const activeCandles = candles.slice(0, maxLevelCandles);
+    const finishIndex = activeCandles.length - 1;
+
+    activeCandles.forEach((candle, i) => {
       const bull = candle.c >= candle.o;
       const rawTargetY = priceToY(Math.max(candle.o, candle.c));
 
@@ -349,11 +371,16 @@ export function GameCanvas() {
       const wickTop = bodyTop - Math.min(42, Math.abs(priceToY(candle.h) - rawTargetY) * 0.4 + 16);
       const wickBottom =
         bodyTop + h + Math.min(42, Math.abs(priceToY(candle.l) - rawTargetY) * 0.4 + 16);
-      const w = Math.max(72, tf.candleWidth * (0.95 + deterministicWave(i, 0.12)));
+      let w = Math.max(72, tf.candleWidth * (0.95 + deterministicWave(i, 0.12)));
       const gap = Math.max(28, Math.min(48, tf.gap * (0.9 + deterministicWave(i + 11, 0.18))));
 
       let type: PlatformType = "normal";
-      if (i > 3) {
+      const isFinish = i === finishIndex;
+
+      if (isFinish) {
+        type = "finish";
+        w = 260; // Spacious Golden Victory Podium
+      } else if (i > 3) {
         if (bull) {
           if (i % 7 === 0) {
             type = "spring"; // Short Squeeze Trampoline!
@@ -372,21 +399,38 @@ export function GameCanvas() {
         y: bodyTop,
         baseY: bodyTop,
         w,
-        h,
-        bull,
+        h: isFinish ? Math.max(h, 60) : h,
+        bull: isFinish ? true : bull,
         type,
         price: candle.c,
-        label: candle.label,
+        label: isFinish ? "BİTİŞ ÇİZGİSİ" : candle.label,
         wickTop,
         wickBottom,
         sinkOffset: 0,
         crackTimer: 0,
         cracked: false,
         sinePhase: i * 0.9,
+        isFinish,
       });
 
-      // If Short Squeeze Spring candle, spawn an arc of 4 gold coins in the sky
-      if (type === "spring") {
+      if (isFinish) {
+        state.finishX = cursorX + 90;
+        state.finishMeters = Math.floor(state.finishX / 20);
+
+        // 5 Star Coins over the victory platform
+        for (let coinIdx = 0; coinIdx < 5; coinIdx++) {
+          collectibles.push({
+            x: cursorX + 50 + coinIdx * 38,
+            y: bodyTop - 65 - Math.sin((coinIdx / 4) * Math.PI) * 25,
+            r: 12,
+            kind: "altin",
+            value: 100,
+            collected: false,
+            bob: coinIdx * 0.4,
+          });
+        }
+      } else if (type === "spring") {
+        // If Short Squeeze Spring candle, spawn an arc of 4 gold coins in the sky
         for (let coinIdx = 0; coinIdx < 4; coinIdx++) {
           const coinArcX = cursorX + w / 2 + (coinIdx - 1.5) * 28;
           const coinArcY = bodyTop - 110 - Math.sin((coinIdx / 3) * Math.PI) * 45;
@@ -464,6 +508,8 @@ export function GameCanvas() {
     state.feverTimer = 0;
     state.perfectCount = 0;
     state.gameOver = false;
+    state.isVictory = false;
+    state.completed = false;
     state.particles = [];
     state.floatingTexts = [];
     state.started = false;
@@ -513,6 +559,9 @@ export function GameCanvas() {
       dollars: 0,
       distance: 0,
       gameOver: false,
+      isVictory: false,
+      speedrunRank: null,
+      finishMeters: state.finishMeters,
       elapsedMs: 0,
       streak: 0,
       multiplier: 1,
@@ -538,6 +587,17 @@ export function GameCanvas() {
       sound.startBgm();
     }
     if (state.started) state.elapsedMs = now - state.startAt;
+
+    // Check Finish Line Victory!
+    if (
+      !state.gameOver &&
+      !state.isVictory &&
+      state.finishX > 0 &&
+      player.x + player.w >= state.finishX
+    ) {
+      completeRun();
+      return;
+    }
 
     // Volatile & Fragile Platforms Update
     for (const p of state.platforms) {
@@ -1136,12 +1196,15 @@ export function GameCanvas() {
       }));
     if (state.particles.length > 90) state.particles = state.particles.slice(-90);
 
-    if (Math.floor(now / 50) !== Math.floor((now - dt * 1000) / 50)) {
-      setHud({
+    if (Math.floor(now / 100) !== Math.floor((now - dt * 1000) / 100)) {
+      setHud((prev) => ({
+        ...prev,
         lives: state.lives,
         dollars: state.dollars,
         distance: currentMeters,
         gameOver: state.gameOver,
+        isVictory: state.isVictory,
+        finishMeters: state.finishMeters,
         elapsedMs: state.elapsedMs,
         streak: state.bullStreak,
         multiplier: state.multiplier,
@@ -1152,13 +1215,74 @@ export function GameCanvas() {
         feverCharge: Math.floor(state.feverCharge),
         feverSeconds: Math.ceil(state.feverTimer),
         perfectLandings: state.perfectCount,
+      }));
+    }
+  };
+
+  const completeRun = () => {
+    const state = stateRef.current;
+    if (state.gameOver || state.completed) return;
+    state.completed = true;
+    state.gameOver = true;
+    state.isVictory = true;
+    sound.stopBgm();
+    sound.frenzy();
+    haptic.success();
+
+    const bonusDollars = 1500;
+    const bonusCoins = 25;
+    state.dollars += bonusDollars;
+    addDollarsGlobal(state.dollars);
+    addCoinGlobal(bonusCoins);
+    recordRun(Math.floor(state.distance / 20), selectedCharId, state.dollars);
+
+    const speedrunResult = recordSpeedrunGlobal(
+      state.elapsedMs,
+      TRADE_SYMBOLS[tickerIdx].symbol,
+      selectedCharId,
+    );
+
+    // Confetti celebration burst
+    for (let i = 0; i < 54; i++) {
+      const angle = (Math.PI * 2 * i) / 54;
+      const speed = 75 + Math.random() * 110;
+      state.particles.push({
+        x: state.player.x + state.player.w / 2,
+        y: state.player.y - 12,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 60,
+        size: 3 + Math.random() * 3,
+        life: 1.5,
+        maxLife: 1.5,
+        color: ["#f59e0b", "#10b981", "#38bdf8", "#fbbf24", "#e11d48", "#a855f7"][i % 6],
       });
     }
+
+    setHud({
+      lives: state.lives,
+      dollars: state.dollars,
+      distance: Math.floor(state.distance / 20),
+      gameOver: true,
+      isVictory: true,
+      speedrunRank: speedrunResult.rank,
+      finishMeters: state.finishMeters,
+      elapsedMs: state.elapsedMs,
+      streak: state.bullStreak,
+      multiplier: state.multiplier,
+      isNewRecord: state.isNewRecord,
+      hasShield: false,
+      magnetSeconds: 0,
+      rocketSeconds: 0,
+      feverCharge: 0,
+      feverSeconds: 0,
+      perfectLandings: state.perfectCount,
+    });
   };
 
   const endRun = () => {
     const state = stateRef.current;
     state.gameOver = true;
+    state.isVictory = false;
     sound.stopBgm();
     addDollarsGlobal(state.dollars);
     recordRun(Math.floor(state.distance / 20), selectedCharId, state.dollars);
@@ -1167,6 +1291,9 @@ export function GameCanvas() {
       dollars: state.dollars,
       distance: Math.floor(state.distance / 20),
       gameOver: true,
+      isVictory: false,
+      speedrunRank: null,
+      finishMeters: state.finishMeters,
       elapsedMs: state.elapsedMs,
       streak: 0,
       multiplier: 1,
@@ -1189,15 +1316,20 @@ export function GameCanvas() {
     const height = canvas.clientHeight;
     const state = stateRef.current;
 
-    // Premium natural dark background
+    // Premium natural dark background (Financial workstation dark mode)
     const bgGrad = ctx.createLinearGradient(0, 0, 0, height);
-    bgGrad.addColorStop(0, "#0b0f19");
-    bgGrad.addColorStop(1, "#111827");
+    bgGrad.addColorStop(0, "#080c14");
+    bgGrad.addColorStop(0.5, "#0d131f");
+    bgGrad.addColorStop(1, "#0a0e17");
     ctx.fillStyle = bgGrad;
     ctx.fillRect(0, 0, width, height);
 
+    // Viewport bounds for strict culling (10x rendering boost)
+    const minVisibleX = state.cameraX - 100;
+    const maxVisibleX = state.cameraX + width + 100;
+
     // Subtle financial chart grid
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.03)";
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.025)";
     ctx.lineWidth = 1;
     const gridOffsetX = -(state.cameraX * 0.3) % 40;
     ctx.beginPath();
@@ -1211,30 +1343,37 @@ export function GameCanvas() {
     }
     ctx.stroke();
 
-    // Ambient background volume profile (faint depth)
-    ctx.fillStyle = "rgba(16, 185, 129, 0.025)";
+    // Ambient background volume profile
+    ctx.fillStyle = "rgba(16, 185, 129, 0.022)";
     state.bgBars.forEach((bar) => {
       const bx = ((bar.x - state.cameraX * 0.15) % (width + 140)) - 70;
-      ctx.fillRect(bx < -70 ? bx + width + 140 : bx, height - bar.h, bar.w, bar.h);
+      const drawX = bx < -70 ? bx + width + 140 : bx;
+      ctx.fillRect(drawX, height - bar.h, bar.w, bar.h);
     });
 
     const shakeMagnitude = state.screenShake * state.screenShake * 12;
     const shakeX = shakeMagnitude > 0 ? (Math.random() - 0.5) * shakeMagnitude : 0;
     const shakeY = shakeMagnitude > 0 ? (Math.random() - 0.5) * shakeMagnitude : 0;
 
-    // --- Far Cyberpunk City Skyline (Parallax Layer 1) ---
+    // --- Far Cyberpunk City Skyline (Parallax Layer 1 with Viewport Culling) ---
     ctx.save();
     const skylineParallax = -(state.cameraX * 0.08);
-    ctx.translate((skylineParallax % 800) + shakeX * 0.2, shakeY * 0.2);
-    for (let loop = -1; loop <= 2; loop++) {
-      const offsetX = loop * 800;
+    const baseX = skylineParallax % 800;
+    ctx.translate(shakeX * 0.2, shakeY * 0.2);
+
+    for (let loop = -1; loop <= 1; loop++) {
+      const offsetX = loop * 800 + baseX;
+      if (offsetX + 800 < 0 || offsetX > width) continue;
+
       state.cityBuildings.forEach((b) => {
         const bx = offsetX + b.x;
+        if (bx + b.w < -20 || bx > width + 20) return;
         const by = height - b.h;
+
         // Skyscraper body
-        ctx.fillStyle = "rgba(15, 23, 42, 0.72)";
+        ctx.fillStyle = "rgba(15, 23, 42, 0.75)";
         ctx.fillRect(bx, by, b.w, b.h);
-        ctx.strokeStyle = "rgba(56, 189, 248, 0.12)";
+        ctx.strokeStyle = "rgba(71, 85, 105, 0.25)";
         ctx.lineWidth = 1;
         ctx.strokeRect(bx, by, b.w, b.h);
 
@@ -1242,14 +1381,14 @@ export function GameCanvas() {
         b.windows.forEach((w) => {
           if (w.on) {
             ctx.fillStyle =
-              (b.x + w.x) % 2 === 0 ? "rgba(251, 191, 36, 0.26)" : "rgba(56, 189, 248, 0.24)";
+              (b.x + w.x) % 2 === 0 ? "rgba(245, 158, 11, 0.24)" : "rgba(56, 189, 248, 0.22)";
             ctx.fillRect(bx + w.x, by + w.y, 4, 6);
           }
         });
 
         // Rooftop antenna beacon
         const beaconOn = Math.sin(now / 180 + b.x) > 0;
-        ctx.fillStyle = beaconOn ? "rgba(244, 63, 94, 0.9)" : "rgba(244, 63, 94, 0.2)";
+        ctx.fillStyle = beaconOn ? "rgba(244, 63, 94, 0.9)" : "rgba(244, 63, 94, 0.25)";
         ctx.fillRect(bx + b.w / 2 - 1, by - 6, 2, 6);
 
         // Billboard
@@ -1265,41 +1404,47 @@ export function GameCanvas() {
     ctx.save();
     ctx.translate(-state.cameraX + shakeX, shakeY);
 
-    // --- Flowing Exponential Moving Average (EMA) Ribbons (Layer 2) ---
-    ctx.save();
-    const screenStart = Math.max(0, state.cameraX - 120);
-    const screenEnd = state.cameraX + width + 120;
+    // --- Flowing Exponential Moving Average (EMA) Lines (Layer 2) ---
+    // Rendered with crisp dual-pass strokes for zero GPU lag (no software shadowBlur)
+    const screenStart = Math.max(0, state.cameraX - 80);
+    const screenEnd = state.cameraX + width + 80;
 
-    // EMA-20: Neon Cyan
-    ctx.strokeStyle = "rgba(56, 189, 248, 0.35)";
-    ctx.lineWidth = 2.5;
-    ctx.shadowColor = "rgba(56, 189, 248, 0.6)";
-    ctx.shadowBlur = 6;
+    // EMA-20: Clean Financial Aqua
+    ctx.save();
     ctx.beginPath();
     for (let wx = screenStart; wx < screenEnd; wx += 35) {
       const wy = 320 + Math.sin(wx * 0.005 + now * 0.001) * 55 + Math.cos(wx * 0.002) * 35;
       if (wx === screenStart) ctx.moveTo(wx, wy);
       else ctx.lineTo(wx, wy);
     }
+    // Soft under-stroke for depth
+    ctx.strokeStyle = "rgba(56, 189, 248, 0.12)";
+    ctx.lineWidth = 3.5;
+    ctx.stroke();
+    // Crisp main line
+    ctx.strokeStyle = "rgba(56, 189, 248, 0.65)";
+    ctx.lineWidth = 1.5;
     ctx.stroke();
 
-    // EMA-50: Neon Violet
-    ctx.strokeStyle = "rgba(168, 85, 247, 0.28)";
-    ctx.lineWidth = 2;
-    ctx.shadowColor = "rgba(168, 85, 247, 0.5)";
-    ctx.shadowBlur = 5;
+    // EMA-50: Clean Slate Violet
     ctx.beginPath();
     for (let wx = screenStart; wx < screenEnd; wx += 35) {
       const wy = 360 + Math.sin(wx * 0.003 - now * 0.0008) * 45 + Math.cos(wx * 0.004) * 40;
       if (wx === screenStart) ctx.moveTo(wx, wy);
       else ctx.lineTo(wx, wy);
     }
+    ctx.strokeStyle = "rgba(168, 85, 247, 0.12)";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(168, 85, 247, 0.55)";
+    ctx.lineWidth = 1.5;
     ctx.stroke();
     ctx.restore();
 
     // Ambient floating market embers/dust
     if (state.ambientDust) {
       state.ambientDust.forEach((d) => {
+        if (d.x < minVisibleX || d.x > maxVisibleX) return;
         ctx.fillStyle = `rgba(52, 211, 153, ${d.alpha})`;
         ctx.fillRect(d.x, d.y, d.size, d.size);
       });
@@ -1309,34 +1454,122 @@ export function GameCanvas() {
     if (state.feverTimer > 0 || state.rocketTimer > 0 || Math.abs(state.player.vx) > 310) {
       ctx.save();
       ctx.strokeStyle =
-        state.feverTimer > 0 ? "rgba(251, 191, 36, 0.32)" : "rgba(255, 255, 255, 0.18)";
-      ctx.lineWidth = 1.8;
+        state.feverTimer > 0 ? "rgba(251, 191, 36, 0.28)" : "rgba(255, 255, 255, 0.16)";
+      ctx.lineWidth = 1.5;
       for (let i = 0; i < 14; i++) {
         const lineX = state.cameraX + (((now * 2.2 + i * 90) % (width + 240)) - 120);
         const lineY = (i * 41 + 60) % height;
         ctx.beginPath();
         ctx.moveTo(lineX, lineY);
-        ctx.lineTo(lineX - 50, lineY);
+        ctx.lineTo(lineX - 45, lineY);
         ctx.stroke();
       }
       ctx.restore();
     }
 
-    // Candlesticks
+    // Candlesticks (With Strict Viewport Culling & Zero shadowBlur)
     state.platforms.forEach((platform) => {
       if (platform.cracked) return;
+      if (platform.x + platform.w < minVisibleX || platform.x > maxVisibleX) return;
+
       const y = platform.y + platform.sinkOffset;
       const isBull = platform.bull;
       const isSpring = platform.type === "spring";
       const isVolatile = platform.type === "volatile";
       const isFragile = platform.type === "fragile";
+      const isFinish = platform.isFinish;
 
-      // Realistic glowing wick
+      if (isFinish) {
+        // --- Grand Wall Street Opening/Closing Bell Finish Arch ---
+        const archX = platform.x + 24;
+        const archW = platform.w - 48;
+        const archTop = y - 95;
+
+        // Brass Pillars (Left & Right)
+        const pillarGrad = ctx.createLinearGradient(0, archTop, 0, y);
+        pillarGrad.addColorStop(0, "#fde68a");
+        pillarGrad.addColorStop(0.5, "#d97706");
+        pillarGrad.addColorStop(1, "#78350f");
+
+        ctx.fillStyle = pillarGrad;
+        roundRect(ctx, archX, archTop, 10, y - archTop, 2);
+        ctx.fill();
+        roundRect(ctx, archX + archW - 10, archTop, 10, y - archTop, 2);
+        ctx.fill();
+
+        // Top Arch Crossbeam
+        roundRect(ctx, archX - 8, archTop - 18, archW + 16, 22, 4);
+        ctx.fill();
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.55)";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // Arch Header Text
+        ctx.fillStyle = "#1e1b4b";
+        ctx.font = "bold 9px JetBrains Mono, monospace";
+        ctx.textAlign = "center";
+        ctx.fillText("🔔 BOĞA ZİRVESİ · BİTİŞ 🔔", archX + archW / 2, archTop - 4);
+
+        // Swinging Wall Street Trading Bell
+        const bellSwing = Math.sin(now / 180) * 0.14;
+        ctx.save();
+        ctx.translate(archX + archW / 2, archTop + 8);
+        ctx.rotate(bellSwing);
+        ctx.fillStyle = "#fbbf24";
+        ctx.beginPath();
+        ctx.arc(0, 10, 9, Math.PI, 0, false);
+        ctx.lineTo(12, 20);
+        ctx.lineTo(-12, 20);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = "#b45309";
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+        // Clapper
+        ctx.fillStyle = "#78350f";
+        ctx.beginPath();
+        ctx.arc(0, 22, 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        // Checkered Finish Tape
+        const tapeY = y - 24;
+        const squareSize = 6;
+        const countSquares = Math.floor(archW / squareSize);
+        for (let s = 0; s < countSquares; s++) {
+          for (let row = 0; row < 2; row++) {
+            ctx.fillStyle = (s + row) % 2 === 0 ? "#ffffff" : "#0f172a";
+            ctx.fillRect(archX + s * squareSize, tapeY + row * squareSize, squareSize, squareSize);
+          }
+        }
+        ctx.textAlign = "left";
+
+        // Podium base
+        const podiumGrad = ctx.createLinearGradient(0, y, 0, y + platform.h);
+        podiumGrad.addColorStop(0, "#fbbf24");
+        podiumGrad.addColorStop(0.5, "#d97706");
+        podiumGrad.addColorStop(1, "#92400e");
+        ctx.fillStyle = podiumGrad;
+        roundRect(ctx, platform.x, y, platform.w, platform.h, 6);
+        ctx.fill();
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "bold 11px JetBrains Mono, monospace";
+        ctx.textAlign = "center";
+        ctx.fillText("🏁 MARKET FINISH 🏁", platform.x + platform.w / 2, y + platform.h / 2 + 4);
+        ctx.textAlign = "left";
+        return;
+      }
+
+      // Realistic clean wick
       ctx.strokeStyle = isSpring
-        ? "rgba(251, 191, 36, 0.95)"
+        ? "rgba(245, 158, 11, 0.95)"
         : isBull
-          ? "rgba(16, 185, 129, 0.9)"
-          : "rgba(244, 63, 94, 0.9)";
+          ? "rgba(16, 185, 129, 0.85)"
+          : "rgba(244, 63, 94, 0.85)";
       ctx.lineWidth = 2;
       ctx.lineCap = "round";
       ctx.beginPath();
@@ -1351,62 +1584,52 @@ export function GameCanvas() {
         ctx.arc(
           platform.x + platform.w / 2,
           platform.wickTop + platform.sinkOffset,
-          2.5,
+          2.2,
           0,
           Math.PI * 2,
         );
         ctx.fill();
       }
 
-      // Soft candle shadow
-      ctx.fillStyle = "rgba(0, 0, 0, 0.38)";
-      roundRect(ctx, platform.x + 2, y + 4, platform.w, platform.h, 4);
+      // Soft natural candle shadow
+      ctx.fillStyle = "rgba(0, 0, 0, 0.28)";
+      roundRect(ctx, platform.x + 2, y + 3, platform.w, platform.h, 4);
       ctx.fill();
 
-      // Candlestick body with ambient neon bloom
-      ctx.save();
-      ctx.shadowColor = isSpring
-        ? "rgba(251, 191, 36, 0.65)"
-        : isBull
-          ? "rgba(16, 185, 129, 0.45)"
-          : "rgba(244, 63, 94, 0.38)";
-      ctx.shadowBlur = isSpring ? 12 : 8;
-
+      // Candlestick body with natural TradingView color gradients
       const bodyGrad = ctx.createLinearGradient(0, y, 0, y + platform.h);
       if (isSpring) {
-        bodyGrad.addColorStop(0, "#fbbf24");
-        bodyGrad.addColorStop(0.5, "#10b981");
-        bodyGrad.addColorStop(1, "#047857");
+        bodyGrad.addColorStop(0, "#f59e0b");
+        bodyGrad.addColorStop(0.5, "#d97706");
+        bodyGrad.addColorStop(1, "#b45309");
       } else if (isBull) {
         bodyGrad.addColorStop(0, "#10b981");
-        bodyGrad.addColorStop(0.5, "#059669");
+        bodyGrad.addColorStop(0.6, "#059669");
         bodyGrad.addColorStop(1, "#047857");
       } else {
         bodyGrad.addColorStop(0, "#f43f5e");
-        bodyGrad.addColorStop(0.5, "#e11d48");
+        bodyGrad.addColorStop(0.6, "#e11d48");
         bodyGrad.addColorStop(1, "#be123c");
       }
       ctx.fillStyle = bodyGrad;
       roundRect(ctx, platform.x, y, platform.w, platform.h, 4);
       ctx.fill();
-      ctx.restore();
 
       // Specialized Candle Type Overlays
       if (isSpring) {
-        // Trampoline Spring Chevron
         ctx.fillStyle = "#ffffff";
-        ctx.font = "bold 11px JetBrains Mono, monospace";
+        ctx.font = "bold 10px JetBrains Mono, monospace";
         ctx.textAlign = "center";
         ctx.fillText("▲▲ SHORT SQUEEZE", platform.x + platform.w / 2, y + platform.h / 2 + 3.5);
         ctx.textAlign = "left";
       } else if (isVolatile) {
-        ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
+        ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
         ctx.font = "bold 9px JetBrains Mono, monospace";
         ctx.textAlign = "center";
         ctx.fillText("⚡ VOLATİL", platform.x + platform.w / 2, y + platform.h / 2 + 3);
         ctx.textAlign = "left";
       } else if (isFragile) {
-        ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+        ctx.fillStyle = "rgba(255, 255, 255, 0.92)";
         ctx.font = "bold 9px JetBrains Mono, monospace";
         ctx.textAlign = "center";
         ctx.fillText(
@@ -1417,9 +1640,9 @@ export function GameCanvas() {
         ctx.textAlign = "left";
       }
 
-      // Subtle top highlight sheen
+      // Crisp 1px top specular edge highlight
       ctx.strokeStyle = isSpring
-        ? "rgba(255, 255, 255, 0.6)"
+        ? "rgba(255, 255, 255, 0.55)"
         : isBull
           ? "rgba(255, 255, 255, 0.35)"
           : "rgba(255, 255, 255, 0.22)";
@@ -1430,19 +1653,21 @@ export function GameCanvas() {
       ctx.stroke();
     });
 
-    // Price tags under candles
+    // Price tags under candles (Viewport Culled)
     ctx.font = "600 10px JetBrains Mono, monospace";
     state.platforms.forEach((platform, i) => {
       if (platform.cracked || i % 6 !== 0) return;
+      if (platform.x + platform.w < minVisibleX || platform.x > maxVisibleX) return;
       ctx.fillStyle = "rgba(148, 163, 184, 0.75)";
       ctx.fillText(platform.label, platform.x, platform.y + platform.h + 24);
       ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
       ctx.fillText(`$${platform.price.toFixed(2)}`, platform.x, platform.y + platform.h + 38);
     });
 
-    // Collectibles & Power-ups
+    // Collectibles & Power-ups (Viewport Culled)
     state.collectibles.forEach((item) => {
       if (item.collected) return;
+      if (item.x + 30 < minVisibleX || item.x - 30 > maxVisibleX) return;
       const y = item.y + Math.sin(item.bob) * 4;
       if (item.kind === "dolar") {
         drawDollarBill(ctx, item.x, y, now);
@@ -1459,13 +1684,11 @@ export function GameCanvas() {
     // Player with power-up effects
     const player = state.player;
 
-    // Fever mode celestial aura
+    // Fever mode celestial aura (Rendered with dual circles instead of slow shadowBlur)
     if (state.feverTimer > 0) {
       ctx.save();
-      ctx.strokeStyle = "rgba(251, 191, 36, 0.85)";
-      ctx.lineWidth = 2.5;
-      ctx.shadowColor = "#f59e0b";
-      ctx.shadowBlur = 14;
+      ctx.strokeStyle = "rgba(251, 191, 36, 0.22)";
+      ctx.lineWidth = 5;
       ctx.beginPath();
       ctx.arc(
         player.x + player.w / 2,
@@ -1474,6 +1697,9 @@ export function GameCanvas() {
         0,
         Math.PI * 2,
       );
+      ctx.stroke();
+      ctx.strokeStyle = "rgba(251, 191, 36, 0.9)";
+      ctx.lineWidth = 2;
       ctx.stroke();
       ctx.restore();
     }
@@ -1687,6 +1913,36 @@ export function GameCanvas() {
         </div>
 
         <div className="flex items-center gap-1.5">
+          {/* Finish Line Progress */}
+          <div className="glass-low flex items-center gap-1.5 rounded-xl px-2 py-1 border border-white/8 text-[11px] font-mono font-bold text-muted-foreground">
+            <Flag className="h-3.5 w-3.5 text-amber-400" />
+            <div className="relative h-1.5 w-10 overflow-hidden rounded-full bg-slate-800">
+              <div
+                className="h-full bg-gradient-to-r from-emerald-500 to-amber-400 transition-all duration-300"
+                style={{
+                  width: `${Math.min(100, Math.floor((hud.distance / (hud.finishMeters || 1)) * 100))}%`,
+                }}
+              />
+            </div>
+            <span className="text-white text-[10px]">
+              %{Math.min(100, Math.floor((hud.distance / (hud.finishMeters || 1)) * 100))}
+            </span>
+          </div>
+
+          {/* Daily Speedrun Leaderboard button */}
+          <button
+            onClick={() => {
+              sound.click();
+              haptic.light();
+              setLeaderboardModalOpen(true);
+            }}
+            className="glass-low flex items-center gap-1 rounded-xl px-2 py-1 text-xs font-mono font-bold text-amber-400 border border-amber-500/25 hover:bg-amber-500/10 active:scale-95 transition-all"
+            title="Günün En Hızlıları"
+          >
+            <Trophy className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">HIZLILAR</span>
+          </button>
+
           {hasStartedRun && !hud.gameOver && (
             <button
               onClick={togglePause}
@@ -1701,7 +1957,7 @@ export function GameCanvas() {
             </button>
           )}
 
-          <div className="glass-low min-w-[80px] rounded-xl px-2.5 py-1.5 text-right font-mono text-xs font-bold text-emerald-400 border border-white/8">
+          <div className="glass-low min-w-[76px] rounded-xl px-2 py-1 text-right font-mono text-xs font-bold text-emerald-400 border border-white/8">
             {formatStopwatch(hud.elapsedMs)}
           </div>
         </div>
@@ -1797,6 +2053,16 @@ export function GameCanvas() {
                   <RotateCcw className="h-4 w-4" /> YENİDEN BAŞLAT
                 </button>
 
+                <button
+                  onClick={() => {
+                    sound.click();
+                    setLeaderboardModalOpen(true);
+                  }}
+                  className="glass-low inline-flex w-full items-center justify-center gap-2 rounded-xl py-2 text-xs font-bold text-amber-400 hover:bg-amber-500/10 active:scale-95 transition-all border border-amber-500/25"
+                >
+                  <Trophy className="h-3.5 w-3.5" /> GÜNÜN EN HIZLILARI
+                </button>
+
                 <div className="flex gap-2">
                   <button
                     onClick={toggleMuteInGame}
@@ -1824,8 +2090,136 @@ export function GameCanvas() {
           </div>
         )}
 
-        {/* Game Over Modal */}
-        {hud.gameOver && (
+        {/* Victory Modal with Daily Speedrun Leaderboard */}
+        {hud.gameOver && hud.isVictory && (
+          <div className="absolute inset-0 z-40 grid place-items-center bg-black/80 backdrop-blur-md p-3 overflow-y-auto">
+            <div className="glass w-full max-w-[360px] rounded-2xl p-5 text-center border border-amber-500/30 shadow-2xl my-auto">
+              <div className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/20 px-3 py-1 text-xs font-bold text-amber-400 border border-amber-500/30 animate-pulse">
+                <Trophy className="h-4 w-4" /> BOĞA ZİRVESİNE ULAŞILDI!
+              </div>
+
+              <div className="mt-2 font-display text-2xl font-black tracking-tight text-white">
+                PİYASA KAPANIŞ ZİLİ ÇALDI
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                Tüm mumları başarıyla aştın ve zirveye ulaştın!
+              </div>
+
+              {/* Player Speedrun Rank Card */}
+              <div className="mt-3.5 rounded-xl bg-gradient-to-br from-amber-500/20 via-emerald-500/10 to-transparent p-3 border border-amber-500/30">
+                <div className="text-[10px] font-mono uppercase font-bold text-amber-300">
+                  GÜNÜN KOŞU DERECESİ
+                </div>
+                <div className="mt-1 flex items-center justify-center gap-2">
+                  <Medal className="h-5 w-5 text-amber-400" />
+                  <div className="font-mono text-lg font-black text-white">
+                    {hud.speedrunRank === 1
+                      ? "1. SIRA (GÜNÜN ŞAMPİYONU!)"
+                      : hud.speedrunRank === 2
+                        ? "2. SIRA (GÜNÜN PODYUMU)"
+                        : hud.speedrunRank === 3
+                          ? "3. SIRA (GÜNÜN PODYUMU)"
+                          : `${hud.speedrunRank}. SIRA`}
+                  </div>
+                </div>
+                <div className="mt-0.5 font-mono text-xs text-emerald-400 font-bold">
+                  Bitiş Süresi: {formatStopwatch(hud.elapsedMs)}
+                </div>
+              </div>
+
+              {/* Stats Grid */}
+              <div className="mt-3 grid grid-cols-4 gap-1.5 font-mono text-xs">
+                <Result label="SÜRE" value={formatStopwatch(hud.elapsedMs)} />
+                <Result label="MESAFE" value={`${hud.distance}m`} />
+                <Result label="KAZANÇ" value={`+$${hud.dollars}`} />
+                <Result label="BONUS" value="+25 COIN" />
+              </div>
+
+              {/* Daily Speedrun Leaderboard (Günün En Hızlıları) */}
+              <div className="mt-3.5 text-left">
+                <div className="flex items-center justify-between pb-1.5">
+                  <div className="flex items-center gap-1.5 font-mono text-xs font-bold text-white">
+                    <Trophy className="h-3.5 w-3.5 text-amber-400" />
+                    <span>GÜNÜN EN HIZLILARI</span>
+                  </div>
+                  <span className="font-mono text-[10px] text-muted-foreground">TOP 8</span>
+                </div>
+
+                <div className="max-h-[160px] overflow-y-auto space-y-1 rounded-xl bg-slate-950/60 p-1.5 border border-white/8 scrollbar-none">
+                  {getTodayLeaderboardGlobal().map((entry) => (
+                    <div
+                      key={entry.rank}
+                      className={
+                        "flex items-center justify-between rounded-lg px-2 py-1 text-xs font-mono transition-all " +
+                        (entry.isPlayer
+                          ? "bg-emerald-500/25 border border-emerald-500/50 text-white font-bold"
+                          : "text-slate-300 hover:bg-white/5")
+                      }
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        <span
+                          className={
+                            "grid h-4.5 w-4.5 place-items-center rounded-md text-[10px] font-bold " +
+                            (entry.rank === 1
+                              ? "bg-amber-500 text-black"
+                              : entry.rank === 2
+                                ? "bg-slate-300 text-black"
+                                : entry.rank === 3
+                                  ? "bg-amber-700 text-white"
+                                  : "bg-slate-800 text-slate-400")
+                          }
+                        >
+                          {entry.rank}
+                        </span>
+                        <div className="truncate">
+                          <span className={entry.isPlayer ? "text-emerald-400 font-bold" : ""}>
+                            {entry.runnerName}
+                          </span>
+                          {entry.isPlayer && (
+                            <span className="ml-1 rounded bg-emerald-500/30 px-1 py-0.2 text-[9px] text-emerald-300">
+                              SEN
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="font-bold text-white">{formatStopwatch(entry.timeMs)}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="mt-3.5 flex flex-col gap-2">
+                <button
+                  onClick={restart}
+                  className="primary-cta inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 font-bold text-white active:scale-95 transition-all shadow-lg"
+                >
+                  <RotateCcw className="h-4 w-4" /> DAHA HIZLI KOŞ (YENİ REKOR)
+                </button>
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={shareScore}
+                    className="glass-low flex-1 inline-flex items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-semibold text-muted-foreground hover:text-white active:scale-95 transition-all border border-white/8"
+                  >
+                    <Share2 className="h-4 w-4" /> {copiedShare ? "KOPYALANDI!" : "DERECENİ PAYLAŞ"}
+                  </button>
+
+                  <Link
+                    to="/"
+                    className="glass-low inline-flex items-center justify-center px-4 rounded-xl text-xs font-semibold text-muted-foreground hover:text-white active:scale-95 transition-all border border-white/8"
+                    title="Ana Menü"
+                  >
+                    <Home className="h-4 w-4" />
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Regular Game Over Modal (when run terminates without reaching finish) */}
+        {hud.gameOver && !hud.isVictory && (
           <div className="absolute inset-0 grid place-items-center bg-black/75 backdrop-blur-md p-4">
             <div className="glass w-full max-w-[320px] rounded-2xl p-6 text-center border border-white/10 shadow-2xl">
               {hud.isNewRecord && (
@@ -1854,12 +2248,101 @@ export function GameCanvas() {
                 </button>
 
                 <button
+                  onClick={() => {
+                    sound.click();
+                    setLeaderboardModalOpen(true);
+                  }}
+                  className="glass-low inline-flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-bold text-amber-400 hover:bg-amber-500/10 active:scale-95 transition-all border border-amber-500/25"
+                >
+                  <Trophy className="h-4 w-4" /> GÜNÜN EN HIZLILARI
+                </button>
+
+                <button
                   onClick={shareScore}
-                  className="glass-low inline-flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-semibold text-muted-foreground hover:text-white active:scale-95 transition-all border border-white/8"
+                  className="glass-low inline-flex w-full items-center justify-center gap-2 rounded-xl py-2 text-xs font-semibold text-muted-foreground hover:text-white active:scale-95 transition-all border border-white/8"
                 >
                   <Share2 className="h-4 w-4" /> {copiedShare ? "KOPYALANDI!" : "SKORU PAYLAŞ"}
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Standalone Daily Speedrun Leaderboard Modal */}
+        {leaderboardModalOpen && (
+          <div className="absolute inset-0 z-50 grid place-items-center bg-black/80 backdrop-blur-md p-3">
+            <div className="glass w-full max-w-[340px] rounded-2xl p-5 border border-white/10 shadow-2xl">
+              <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                <div className="flex items-center gap-2 font-display text-base font-bold text-white">
+                  <Trophy className="h-5 w-5 text-amber-400" />
+                  <span>Günün En Hızlıları</span>
+                </div>
+                <button
+                  onClick={() => {
+                    sound.click();
+                    setLeaderboardModalOpen(false);
+                  }}
+                  className="glass-low grid h-8 w-8 place-items-center rounded-full text-muted-foreground hover:text-white"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="mt-2.5 text-xs text-muted-foreground font-mono">
+                Piyasa zirvesini bugün en hızlı tamamlayan koşucular:
+              </div>
+
+              <div className="mt-3 space-y-1.5 max-h-[260px] overflow-y-auto scrollbar-none">
+                {getTodayLeaderboardGlobal().map((entry) => (
+                  <div
+                    key={entry.rank}
+                    className={
+                      "flex items-center justify-between rounded-xl p-2.5 font-mono text-xs border " +
+                      (entry.isPlayer
+                        ? "bg-emerald-500/20 border-emerald-500/40 text-white font-bold"
+                        : "bg-slate-900/50 border-white/5 text-slate-300")
+                    }
+                  >
+                    <div className="flex items-center gap-2.5 truncate">
+                      <span
+                        className={
+                          "grid h-5 w-5 place-items-center rounded-md text-[10px] font-bold " +
+                          (entry.rank === 1
+                            ? "bg-amber-500 text-black font-black"
+                            : entry.rank === 2
+                              ? "bg-slate-300 text-black font-black"
+                              : entry.rank === 3
+                                ? "bg-amber-700 text-white font-black"
+                                : "bg-slate-800 text-slate-400")
+                        }
+                      >
+                        {entry.rank}
+                      </span>
+                      <div className="truncate">
+                        <div className="font-bold text-foreground truncate">
+                          {entry.runnerName} {entry.isPlayer && "(SEN)"}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground truncate">
+                          {entry.charName} · {entry.symbol}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="font-mono text-xs font-bold text-emerald-400">
+                      {formatStopwatch(entry.timeMs)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                onClick={() => {
+                  sound.click();
+                  setLeaderboardModalOpen(false);
+                }}
+                className="glass-low mt-4 w-full rounded-xl py-2.5 text-xs font-bold text-white hover:bg-white/10 active:scale-95 transition-all border border-white/8"
+              >
+                KAPAT
+              </button>
             </div>
           </div>
         )}
