@@ -795,6 +795,7 @@ export function GameCanvas() {
     // Platform side wall collision: prevent passing horizontally through candle bodies
     for (const platform of state.platforms) {
       if (platform.cracked) continue;
+      if (Math.abs(platform.x - player.x) > 120) continue;
       const py = platform.y + platform.sinkOffset;
       const candleBottom = py + platform.h;
       if (player.y + player.h > py + 14 && player.y < candleBottom) {
@@ -816,6 +817,7 @@ export function GameCanvas() {
 
     for (const platform of state.platforms) {
       if (platform.cracked) continue;
+      if (Math.abs(platform.x - player.x) > 160) continue;
       const py = platform.y + platform.sinkOffset;
 
       // Platform foot check with ledge forgiveness margin (6px)
@@ -1316,12 +1318,8 @@ export function GameCanvas() {
     const height = canvas.clientHeight;
     const state = stateRef.current;
 
-    // Premium natural dark background (Financial workstation dark mode)
-    const bgGrad = ctx.createLinearGradient(0, 0, 0, height);
-    bgGrad.addColorStop(0, "#080c14");
-    bgGrad.addColorStop(0.5, "#0d131f");
-    bgGrad.addColorStop(1, "#0a0e17");
-    ctx.fillStyle = bgGrad;
+    // Premium dark background (Solid fast fill, zero per-frame allocation)
+    ctx.fillStyle = "#080c14";
     ctx.fillRect(0, 0, width, height);
 
     // Viewport bounds for strict culling (10x rendering boost)
@@ -1486,21 +1484,17 @@ export function GameCanvas() {
         const archTop = y - 95;
 
         // Brass Pillars (Left & Right)
-        const pillarGrad = ctx.createLinearGradient(0, archTop, 0, y);
-        pillarGrad.addColorStop(0, "#fde68a");
-        pillarGrad.addColorStop(0.5, "#d97706");
-        pillarGrad.addColorStop(1, "#78350f");
-
-        ctx.fillStyle = pillarGrad;
+        ctx.fillStyle = "#b45309";
         roundRect(ctx, archX, archTop, 10, y - archTop, 2);
         ctx.fill();
         roundRect(ctx, archX + archW - 10, archTop, 10, y - archTop, 2);
         ctx.fill();
 
         // Top Arch Crossbeam
+        ctx.fillStyle = "#d97706";
         roundRect(ctx, archX - 8, archTop - 18, archW + 16, 22, 4);
         ctx.fill();
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.55)";
+        ctx.strokeStyle = "#fde68a";
         ctx.lineWidth = 1;
         ctx.stroke();
 
@@ -1545,13 +1539,11 @@ export function GameCanvas() {
         ctx.textAlign = "left";
 
         // Podium base
-        const podiumGrad = ctx.createLinearGradient(0, y, 0, y + platform.h);
-        podiumGrad.addColorStop(0, "#fbbf24");
-        podiumGrad.addColorStop(0.5, "#d97706");
-        podiumGrad.addColorStop(1, "#92400e");
-        ctx.fillStyle = podiumGrad;
+        ctx.fillStyle = "#d97706";
         roundRect(ctx, platform.x, y, platform.w, platform.h, 6);
         ctx.fill();
+        ctx.fillStyle = "#fde68a";
+        ctx.fillRect(platform.x + 4, y, platform.w - 8, 3);
         ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
         ctx.lineWidth = 1.5;
         ctx.stroke();
@@ -1596,24 +1588,14 @@ export function GameCanvas() {
       roundRect(ctx, platform.x + 2, y + 3, platform.w, platform.h, 4);
       ctx.fill();
 
-      // Candlestick body with natural TradingView color gradients
-      const bodyGrad = ctx.createLinearGradient(0, y, 0, y + platform.h);
-      if (isSpring) {
-        bodyGrad.addColorStop(0, "#f59e0b");
-        bodyGrad.addColorStop(0.5, "#d97706");
-        bodyGrad.addColorStop(1, "#b45309");
-      } else if (isBull) {
-        bodyGrad.addColorStop(0, "#10b981");
-        bodyGrad.addColorStop(0.6, "#059669");
-        bodyGrad.addColorStop(1, "#047857");
-      } else {
-        bodyGrad.addColorStop(0, "#f43f5e");
-        bodyGrad.addColorStop(0.6, "#e11d48");
-        bodyGrad.addColorStop(1, "#be123c");
-      }
-      ctx.fillStyle = bodyGrad;
+      // Candlestick body with crisp TradingView colors (0 GPU gradient allocations)
+      ctx.fillStyle = isSpring ? "#d97706" : isBull ? "#059669" : "#be123c";
       roundRect(ctx, platform.x, y, platform.w, platform.h, 4);
       ctx.fill();
+
+      // Top specular highlight edge
+      ctx.fillStyle = isSpring ? "#fef08a" : isBull ? "#34d399" : "#fb7185";
+      ctx.fillRect(platform.x + 2, y, platform.w - 4, 2);
 
       // Specialized Candle Type Overlays
       if (isSpring) {
@@ -1843,167 +1825,94 @@ export function GameCanvas() {
 
   return (
     <div className="relative flex h-[calc(100dvh-72px)] flex-col px-3 pb-3">
-      {/* Top HUD: Hearts, Active Power-ups, Combo Streak, Pause & Stopwatch */}
+      {/* Sleek Unified Top HUD Header */}
       <div className="flex items-center justify-between gap-2 py-2">
-        <div className="glass-low flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 border border-white/8">
-          {[0, 1, 2].map((i) => (
-            <Heart
-              key={i}
-              className={
-                "h-4 w-4 transition-all " +
-                (i < hud.lives
-                  ? "fill-rose-500 text-rose-500 scale-100"
-                  : "text-slate-600 scale-90")
-              }
-            />
-          ))}
-        </div>
-
-        {/* Active Power-up Badges & Fever Gauge */}
-        <div className="flex items-center gap-1.5">
-          {/* Fever / Moonshot Gauge */}
-          <div className="glass-low flex items-center gap-1.5 rounded-xl px-2 py-1 border border-amber-500/25">
-            <div className="relative h-2 w-14 overflow-hidden rounded-full bg-slate-800/80">
-              <div
+        {/* Left: Hearts & Stock Ticker Badge */}
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* Hearts */}
+          <div className="glass-low flex items-center gap-1 sm:gap-1.5 rounded-xl px-2.5 py-1.5 border border-white/8 shadow-sm">
+            {[0, 1, 2].map((i) => (
+              <Heart
+                key={i}
                 className={
-                  "h-full transition-all duration-200 " +
-                  (hud.feverSeconds > 0
-                    ? "w-full bg-gradient-to-r from-amber-400 via-rose-500 to-emerald-400 animate-pulse"
-                    : "bg-gradient-to-r from-amber-500 to-emerald-400")
+                  "h-3.5 w-3.5 sm:h-4 sm:w-4 transition-all " +
+                  (i < hud.lives
+                    ? "fill-rose-500 text-rose-500 scale-100 drop-shadow-[0_0_8px_rgba(244,63,94,0.45)]"
+                    : "text-slate-600 scale-90")
                 }
-                style={{ width: hud.feverSeconds > 0 ? "100%" : `${hud.feverCharge}%` }}
               />
-            </div>
-            <span className="font-mono text-[9px] font-bold text-amber-400">
-              {hud.feverSeconds > 0 ? `FEVER ${hud.feverSeconds}s` : `${hud.feverCharge}%`}
-            </span>
+            ))}
           </div>
 
-          {hud.hasShield && (
-            <div className="flex items-center gap-1 rounded-xl bg-sky-500/20 px-2 py-1 border border-sky-500/40 text-[10px] font-bold font-mono text-sky-400 animate-pulse">
-              <Shield className="h-3 w-3" />
-              <span>STOP-LOSS</span>
-            </div>
-          )}
-          {hud.magnetSeconds > 0 && (
-            <div className="flex items-center gap-1 rounded-xl bg-amber-500/20 px-2 py-1 border border-amber-500/40 text-[10px] font-bold font-mono text-amber-400">
-              <Magnet className="h-3 w-3" />
-              <span>{hud.magnetSeconds}s</span>
-            </div>
-          )}
-          {hud.rocketSeconds > 0 && (
-            <div className="flex items-center gap-1 rounded-xl bg-orange-500/20 px-2 py-1 border border-orange-500/40 text-[10px] font-bold font-mono text-orange-400 animate-bounce">
-              <Flame className="h-3 w-3" />
-              <span>ROKET {hud.rocketSeconds}s</span>
-            </div>
-          )}
-          {hud.multiplier > 1 && (
-            <div
-              className={
-                "flex items-center gap-1 rounded-xl px-2.5 py-1 text-xs font-bold font-mono " +
-                (hud.feverSeconds > 0
-                  ? "bg-amber-500/30 border border-amber-400 text-amber-300 animate-bounce"
-                  : "bg-emerald-500/20 border border-emerald-500/40 text-emerald-400")
-              }
-            >
-              <Zap className="h-3 w-3 fill-current" />
-              <span>x{hud.multiplier}</span>
-            </div>
-          )}
+          {/* Stock Ticker Button */}
+          <button
+            onClick={() => {
+              sound.click();
+              haptic.light();
+              setSelectorOpen(true);
+            }}
+            className="glass-low flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 border border-white/8 text-xs font-mono font-bold hover:bg-white/5 active:scale-95 transition-all shadow-sm"
+            title="Hisse Değiştir"
+          >
+            <span className="text-emerald-400 font-extrabold">{currentSymbol.symbol}</span>
+            <span className="hidden sm:inline text-muted-foreground font-normal text-[11px]">
+              · {currentSymbol.name}
+            </span>
+          </button>
         </div>
 
+        {/* Center: Bull Peak Progress Bar */}
+        <div className="glass-low flex items-center gap-1.5 sm:gap-2 rounded-xl px-2.5 py-1.5 border border-white/8 font-mono text-[11px] shadow-sm">
+          <Flag className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-amber-400 shrink-0" />
+          <div className="relative h-1.5 w-12 sm:w-24 overflow-hidden rounded-full bg-slate-800">
+            <div
+              className="h-full bg-gradient-to-r from-emerald-500 via-teal-400 to-amber-400 transition-all duration-300"
+              style={{
+                width: `${Math.min(100, Math.floor((hud.distance / (hud.finishMeters || 1)) * 100))}%`,
+              }}
+            />
+          </div>
+          <span className="text-white font-bold text-[10px] sm:text-[11px]">
+            {hud.distance}m
+            <span className="text-muted-foreground hidden sm:inline">/{hud.finishMeters}m</span>
+          </span>
+        </div>
+
+        {/* Right: Dollars + Stopwatch + Trophy + Pause */}
         <div className="flex items-center gap-1.5">
-          {/* Finish Line Progress */}
-          <div className="glass-low flex items-center gap-1.5 rounded-xl px-2 py-1 border border-white/8 text-[11px] font-mono font-bold text-muted-foreground">
-            <Flag className="h-3.5 w-3.5 text-amber-400" />
-            <div className="relative h-1.5 w-10 overflow-hidden rounded-full bg-slate-800">
-              <div
-                className="h-full bg-gradient-to-r from-emerald-500 to-amber-400 transition-all duration-300"
-                style={{
-                  width: `${Math.min(100, Math.floor((hud.distance / (hud.finishMeters || 1)) * 100))}%`,
-                }}
-              />
-            </div>
-            <span className="text-white text-[10px]">
-              %{Math.min(100, Math.floor((hud.distance / (hud.finishMeters || 1)) * 100))}
-            </span>
+          <div className="glass-low hidden xs:flex items-center rounded-xl px-2 py-1.5 font-mono text-xs font-black text-emerald-400 border border-emerald-500/20 shadow-sm">
+            +${hud.dollars}
           </div>
 
-          {/* Daily Speedrun Leaderboard button */}
+          <div className="glass-low rounded-xl px-2 py-1.5 text-center font-mono text-xs font-bold text-white border border-white/8 shadow-sm">
+            {formatStopwatch(hud.elapsedMs)}
+          </div>
+
           <button
             onClick={() => {
               sound.click();
               haptic.light();
               setLeaderboardModalOpen(true);
             }}
-            className="glass-low flex items-center gap-1 rounded-xl px-2 py-1 text-xs font-mono font-bold text-amber-400 border border-amber-500/25 hover:bg-amber-500/10 active:scale-95 transition-all"
+            className="glass-low grid h-7 w-7 sm:h-8 sm:w-8 place-items-center rounded-xl text-amber-400 border border-amber-500/25 hover:bg-amber-500/10 active:scale-95 transition-all shadow-sm"
             title="Günün En Hızlıları"
           >
             <Trophy className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">HIZLILAR</span>
           </button>
 
           {hasStartedRun && !hud.gameOver && (
             <button
               onClick={togglePause}
-              className="glass-low grid h-8 w-8 place-items-center rounded-xl text-muted-foreground hover:text-white active:scale-95 transition-all border border-white/8"
+              className="glass-low grid h-7 w-7 sm:h-8 sm:w-8 place-items-center rounded-xl text-muted-foreground hover:text-white active:scale-95 transition-all border border-white/8 shadow-sm"
               aria-label="Duraklat"
             >
               {isPaused ? (
-                <Play className="h-3.5 w-3.5 fill-current" />
+                <Play className="h-3.5 w-3.5 fill-current text-emerald-400" />
               ) : (
                 <Pause className="h-3.5 w-3.5" />
               )}
             </button>
           )}
-
-          <div className="glass-low min-w-[76px] rounded-xl px-2 py-1 text-right font-mono text-xs font-bold text-emerald-400 border border-white/8">
-            {formatStopwatch(hud.elapsedMs)}
-          </div>
-        </div>
-      </div>
-
-      {/* Timeframe Chips */}
-      <div className="mb-2 grid grid-cols-4 gap-1.5 rounded-xl border border-white/8 bg-slate-900/40 p-1.5">
-        {TIMEFRAMES.map((tf) => (
-          <button
-            key={tf.id}
-            onClick={() => {
-              sound.click();
-              haptic.light();
-              if (hasStartedRun) {
-                setTimeframe(tf);
-              } else {
-                setDraftTimeframe(tf);
-              }
-            }}
-            className={
-              "rounded-lg py-1.5 text-center font-mono text-xs font-bold transition-all " +
-              ((hasStartedRun ? timeframe.id : draftTimeframe.id) === tf.id
-                ? "bg-primary text-white shadow-sm"
-                : "text-muted-foreground hover:text-white active:scale-95")
-            }
-          >
-            {tf.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Stock Ticker Banner & Distance */}
-      <div className="flex items-center justify-between gap-2 pb-2">
-        <button
-          onClick={() => {
-            sound.click();
-            haptic.light();
-            setSelectorOpen(true);
-          }}
-          className="glass-low flex items-center gap-2 truncate rounded-xl px-3 py-1.5 font-mono text-xs font-bold text-foreground border border-white/8 active:scale-95 transition-all"
-        >
-          <span className="text-emerald-400">{currentSymbol.symbol}</span>
-          <span className="text-muted-foreground text-[11px]">· {currentSymbol.name}</span>
-        </button>
-        <div className="font-mono text-xs text-muted-foreground">
-          MESAFE <span className="font-bold text-white">{hud.distance}m</span>
         </div>
       </div>
 
@@ -2036,6 +1945,33 @@ export function GameCanvas() {
               <div className="mt-4 grid grid-cols-2 gap-2 font-mono text-xs">
                 <Result label="MESAFE" value={`${hud.distance}m`} />
                 <Result label="KAZANÇ" value={`$${hud.dollars}`} />
+              </div>
+
+              {/* Timeframe switch during pause */}
+              <div className="mt-3">
+                <div className="font-mono text-[10px] uppercase font-semibold text-muted-foreground text-left mb-1.5">
+                  MUM ZAMAN DİLİMİ
+                </div>
+                <div className="grid grid-cols-4 gap-1 rounded-xl border border-white/8 bg-slate-900/60 p-1">
+                  {TIMEFRAMES.map((tf) => (
+                    <button
+                      key={tf.id}
+                      onClick={() => {
+                        sound.click();
+                        haptic.light();
+                        setTimeframe(tf);
+                      }}
+                      className={
+                        "rounded-lg py-1.5 text-center font-mono text-xs font-bold transition-all " +
+                        (timeframe.id === tf.id
+                          ? "bg-primary text-white shadow-sm"
+                          : "text-muted-foreground hover:text-white")
+                      }
+                    >
+                      {tf.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div className="mt-5 flex flex-col gap-2.5">
@@ -2347,12 +2283,43 @@ export function GameCanvas() {
           </div>
         )}
 
-        {/* Bear warning indicator */}
-        <div className="pointer-events-none absolute left-3 top-14 flex items-center gap-2 text-[10px] font-bold">
-          <div className="glass-low flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-rose-400 border border-rose-500/20">
-            <AlertTriangle className="h-3 w-3" /> AYI MUMLARI KAYDIRIR
+        {/* Floating Dynamic Power-Up / Fever Status Pill */}
+        {(hud.feverSeconds > 0 ||
+          hud.hasShield ||
+          hud.magnetSeconds > 0 ||
+          hud.rocketSeconds > 0 ||
+          hud.multiplier > 1) && (
+          <div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-center">
+            <div className="flex items-center gap-1.5">
+              {hud.feverSeconds > 0 ? (
+                <div className="glass flex items-center gap-1.5 rounded-full px-4 py-1.5 border border-amber-400/50 bg-amber-500/20 text-amber-300 font-mono text-xs font-extrabold shadow-lg shadow-amber-500/20 animate-pulse">
+                  <Zap className="h-3.5 w-3.5 fill-current text-amber-400" />
+                  <span>BOĞA ÇILGINLIĞI x5 · {hud.feverSeconds}s</span>
+                </div>
+              ) : hud.rocketSeconds > 0 ? (
+                <div className="glass flex items-center gap-1.5 rounded-full px-4 py-1.5 border border-orange-500/40 bg-orange-500/20 text-orange-300 font-mono text-xs font-extrabold shadow-lg shadow-orange-500/20 animate-bounce">
+                  <Flame className="h-3.5 w-3.5 text-orange-400" />
+                  <span>BOĞA ROKETİ · {hud.rocketSeconds}s</span>
+                </div>
+              ) : hud.magnetSeconds > 0 ? (
+                <div className="glass flex items-center gap-1.5 rounded-full px-3.5 py-1 border border-amber-500/40 bg-amber-500/20 text-amber-300 font-mono text-xs font-bold shadow-md">
+                  <Magnet className="h-3.5 w-3.5 text-amber-400" />
+                  <span>LİKİDİTE MIKNATISI · {hud.magnetSeconds}s</span>
+                </div>
+              ) : hud.hasShield ? (
+                <div className="glass flex items-center gap-1.5 rounded-full px-3.5 py-1 border border-sky-500/40 bg-sky-500/20 text-sky-300 font-mono text-xs font-bold shadow-md">
+                  <Shield className="h-3.5 w-3.5 text-sky-400" />
+                  <span>STOP-LOSS KALKANI</span>
+                </div>
+              ) : hud.multiplier > 1 ? (
+                <div className="glass flex items-center gap-1.5 rounded-full px-3 py-1 border border-emerald-500/40 bg-emerald-500/20 text-emerald-300 font-mono text-xs font-bold shadow-md">
+                  <Zap className="h-3.5 w-3.5 fill-current text-emerald-400" />
+                  <span>SERİ KAZANÇ x{hud.multiplier}</span>
+                </div>
+              ) : null}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Stock Selector Modal */}
         {selectorOpen && (
@@ -2497,38 +2464,48 @@ export function GameCanvas() {
         )}
       </div>
 
-      {/* Mobile Touch Controls with Haptics */}
-      <div className="mt-3 grid grid-cols-[auto_auto_1fr] items-center gap-2.5 touch-none select-none">
-        <button
-          onPointerDown={(e) => {
-            e.preventDefault();
-            haptic.light();
-            setInput("left", true);
-          }}
-          onPointerLeave={() => setInput("left", false)}
-          onPointerUp={() => setInput("left", false)}
-          onPointerCancel={() => setInput("left", false)}
-          className="glass-low touch-none select-none grid h-14 w-14 place-items-center rounded-2xl text-white active:bg-primary/20 active:scale-95 transition-transform border border-white/8 shadow-md"
-          aria-label="Sola koş"
-        >
-          <ArrowLeft className="h-6 w-6" />
-        </button>
+      {/* Ergonomic Arcade Touch Controls */}
+      <div className="mt-2.5 flex items-center justify-between gap-3 touch-none select-none">
+        {/* Directional Thumb Pads */}
+        <div className="flex items-center gap-2">
+          <button
+            onPointerDown={(e) => {
+              e.preventDefault();
+              haptic.light();
+              setInput("left", true);
+            }}
+            onPointerLeave={() => setInput("left", false)}
+            onPointerUp={() => setInput("left", false)}
+            onPointerCancel={() => setInput("left", false)}
+            className="group relative flex h-14 w-16 items-center justify-center rounded-2xl border border-white/10 bg-slate-900/70 text-slate-200 shadow-md backdrop-blur-md active:bg-emerald-500/20 active:border-emerald-500/50 active:scale-95 transition-all"
+            aria-label="Sola koş"
+          >
+            <ArrowLeft className="h-6 w-6 transition-transform group-active:-translate-x-1" />
+            <span className="absolute bottom-1 font-mono text-[8px] text-muted-foreground/60 hidden sm:block">
+              A / ←
+            </span>
+          </button>
 
-        <button
-          onPointerDown={(e) => {
-            e.preventDefault();
-            haptic.light();
-            setInput("right", true);
-          }}
-          onPointerLeave={() => setInput("right", false)}
-          onPointerUp={() => setInput("right", false)}
-          onPointerCancel={() => setInput("right", false)}
-          className="glass-low touch-none select-none grid h-14 w-14 place-items-center rounded-2xl text-white active:bg-primary/20 active:scale-95 transition-transform border border-white/8 shadow-md"
-          aria-label="Sağa koş"
-        >
-          <ArrowRight className="h-6 w-6" />
-        </button>
+          <button
+            onPointerDown={(e) => {
+              e.preventDefault();
+              haptic.light();
+              setInput("right", true);
+            }}
+            onPointerLeave={() => setInput("right", false)}
+            onPointerUp={() => setInput("right", false)}
+            onPointerCancel={() => setInput("right", false)}
+            className="group relative flex h-14 w-16 items-center justify-center rounded-2xl border border-white/10 bg-slate-900/70 text-slate-200 shadow-md backdrop-blur-md active:bg-emerald-500/20 active:border-emerald-500/50 active:scale-95 transition-all"
+            aria-label="Sağa koş"
+          >
+            <ArrowRight className="h-6 w-6 transition-transform group-active:translate-x-1" />
+            <span className="absolute bottom-1 font-mono text-[8px] text-muted-foreground/60 hidden sm:block">
+              D / →
+            </span>
+          </button>
+        </div>
 
+        {/* Large Ergonomic Jump Pad */}
         <button
           onPointerDown={(e) => {
             e.preventDefault();
@@ -2537,12 +2514,15 @@ export function GameCanvas() {
           onPointerLeave={() => setInput("jump", false)}
           onPointerUp={() => setInput("jump", false)}
           onPointerCancel={() => setInput("jump", false)}
-          className="primary-cta touch-none select-none grid h-14 w-full place-items-center rounded-2xl bg-primary text-white active:scale-95 transition-transform shadow-lg"
+          className="relative flex h-14 flex-1 items-center justify-center gap-2 rounded-2xl border border-emerald-400/40 bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500 text-white shadow-lg shadow-emerald-950/40 active:brightness-90 active:scale-[0.98] transition-all"
           aria-label="Zıpla"
         >
-          <div className="flex flex-col items-center">
-            <ChevronsUp className="h-5 w-5" />
-            <span className="font-mono text-[10px] font-bold tracking-widest">ZIPLA</span>
+          <ChevronsUp className="h-5 w-5 animate-pulse" />
+          <div className="flex flex-col items-start leading-none">
+            <span className="font-display text-sm font-extrabold tracking-wider">ZIPLA</span>
+            <span className="font-mono text-[9px] text-emerald-100/75 hidden sm:block">
+              SPACE / W / ↑
+            </span>
           </div>
         </button>
       </div>
@@ -2633,24 +2613,23 @@ function drawHintBox(
 }
 
 function drawDollarBill(ctx: CanvasRenderingContext2D, x: number, y: number, now: number) {
-  const tilt = Math.sin(now / 240) * 3;
+  const tilt = Math.sin(now / 240) * 2;
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate((tilt * Math.PI) / 180);
 
-  // Modern banknote styling
-  ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
-  roundRect(ctx, -12, -6, 26, 15, 2);
+  // Soft shadow
+  ctx.fillStyle = "rgba(0, 0, 0, 0.22)";
+  roundRect(ctx, -12, -5, 25, 14, 2);
   ctx.fill();
 
-  const billGrad = ctx.createLinearGradient(-13, -7, 13, 7);
-  billGrad.addColorStop(0, "#10b981");
-  billGrad.addColorStop(1, "#047857");
-  ctx.fillStyle = billGrad;
+  // Banknote body (Solid fast fill, zero gradient allocation)
+  ctx.fillStyle = "#059669";
   roundRect(ctx, -13, -7, 26, 14, 2);
   ctx.fill();
 
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
+  // Crisp inner rim
+  ctx.strokeStyle = "#34d399";
   ctx.lineWidth = 1;
   roundRect(ctx, -11, -5, 22, 10, 1.5);
   ctx.stroke();
@@ -2665,27 +2644,30 @@ function drawDollarBill(ctx: CanvasRenderingContext2D, x: number, y: number, now
 
 function drawGoldCoin(ctx: CanvasRenderingContext2D, x: number, y: number, radius: number) {
   ctx.save();
-  // Shadow
-  ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
+  // Soft drop shadow
+  ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
   ctx.beginPath();
   ctx.arc(x, y + 2, radius, 0, Math.PI * 2);
   ctx.fill();
 
-  // Natural warm gold gradient
-  const grad = ctx.createRadialGradient(x - 2, y - 2, 2, x, y, radius);
-  grad.addColorStop(0, "#fef08a");
-  grad.addColorStop(0.5, "#f59e0b");
-  grad.addColorStop(1, "#b45309");
-  ctx.fillStyle = grad;
+  // Gold Coin Base (Solid fast fill, zero gradient allocation)
+  ctx.fillStyle = "#d97706";
   ctx.beginPath();
   ctx.arc(x, y, radius, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.6)";
-  ctx.lineWidth = 1.2;
+  ctx.fillStyle = "#f59e0b";
+  ctx.beginPath();
+  ctx.arc(x, y, radius - 1.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = "#fef08a";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(x, y, radius - 3, 0, Math.PI * 2);
   ctx.stroke();
 
-  ctx.fillStyle = "rgba(69, 26, 3, 0.9)";
+  ctx.fillStyle = "#451a03";
   ctx.font = "bold 10px JetBrains Mono, monospace";
   ctx.textAlign = "center";
   ctx.fillText("C", x, y + 3.5);
@@ -2698,28 +2680,24 @@ function drawPowerupItem(
   x: number,
   y: number,
   kind: CollectibleKind,
-  now: number,
+  _now: number,
 ) {
   ctx.save();
   ctx.translate(x, y);
 
   // Soft shadow
-  ctx.fillStyle = "rgba(0,0,0,0.3)";
+  ctx.fillStyle = "rgba(0,0,0,0.25)";
   ctx.beginPath();
   ctx.arc(0, 2, 12, 0, Math.PI * 2);
   ctx.fill();
 
   if (kind === "kalkan") {
     // Stop-Loss Shield Orb
-    const grad = ctx.createRadialGradient(-3, -3, 2, 0, 0, 12);
-    grad.addColorStop(0, "#bae6fd");
-    grad.addColorStop(0.6, "#0284c7");
-    grad.addColorStop(1, "#0369a1");
-    ctx.fillStyle = grad;
+    ctx.fillStyle = "#0284c7";
     ctx.beginPath();
     ctx.arc(0, 0, 12, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
+    ctx.strokeStyle = "#7dd3fc";
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
@@ -2729,15 +2707,11 @@ function drawPowerupItem(
     ctx.fillText("🛡️", 0, 3.5);
   } else if (kind === "miknatis") {
     // Magnet Orb
-    const grad = ctx.createRadialGradient(-3, -3, 2, 0, 0, 12);
-    grad.addColorStop(0, "#fde68a");
-    grad.addColorStop(0.6, "#d97706");
-    grad.addColorStop(1, "#b45309");
-    ctx.fillStyle = grad;
+    ctx.fillStyle = "#d97706";
     ctx.beginPath();
     ctx.arc(0, 0, 12, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
+    ctx.strokeStyle = "#fde68a";
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
@@ -2747,15 +2721,11 @@ function drawPowerupItem(
     ctx.fillText("🧲", 0, 3.5);
   } else if (kind === "roket") {
     // Rocket Orb
-    const grad = ctx.createRadialGradient(-3, -3, 2, 0, 0, 12);
-    grad.addColorStop(0, "#fed7aa");
-    grad.addColorStop(0.6, "#ea580c");
-    grad.addColorStop(1, "#c2410c");
-    ctx.fillStyle = grad;
+    ctx.fillStyle = "#ea580c";
     ctx.beginPath();
     ctx.arc(0, 0, 12, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
+    ctx.strokeStyle = "#fed7aa";
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
@@ -2812,78 +2782,49 @@ function drawPlayer(
     now: number;
   },
 ) {
-  const px = w / 8;
-  const py = h / 10;
-  const legSwing =
-    opts.animation === "sol" || opts.animation === "sag"
-      ? Math.round(Math.sin(opts.runClock * 7) * py)
-      : 0;
-  const jumpLift = opts.animation === "zipla" ? -2 : opts.animation === "dus" ? 2 : 0;
+  const isRunning = opts.animation === "sol" || opts.animation === "sag";
+  const isJumping = opts.animation === "zipla";
+  const isFalling = opts.animation === "dus";
 
-  ctx.imageSmoothingEnabled = false;
-  ctx.fillStyle = "rgba(0,0,0,0.35)";
-  const shadowScale =
-    opts.animation === "zipla"
-      ? 0.62
-      : opts.animation === "dus"
-        ? 0.9
-        : 0.82 + Math.abs(legSwing) * 0.035;
-  ctx.fillRect(x + w * (1 - shadowScale) * 0.5, y + h, w * shadowScale, 3);
+  // Natural athletic running dynamics
+  const runStride = isRunning ? Math.sin(opts.runClock * 13) : 0;
+  const runBob = isRunning ? Math.abs(Math.sin(opts.runClock * 13)) * 3.2 : 0;
+  const idleBreathing = opts.animation === "bekle" ? Math.sin(opts.now / 350) * 1.5 : 0;
+
+  // Athletic forward tilt when running or aerodynamic jump lean
+  const forwardLean = isRunning
+    ? opts.facing * 0.12
+    : isJumping
+      ? -opts.facing * 0.16
+      : isFalling
+        ? opts.facing * 0.12
+        : 0;
+
+  const totalRotation = forwardLean + opts.jumpSpin;
+
+  // Stride squash & stretch (feet impact ground -> squash, leap -> stretch)
+  const dynamicSquashX = isRunning ? 1 - runStride * 0.04 : isJumping ? 0.9 : isFalling ? 1.1 : 1;
+  const dynamicSquashY = isRunning ? 1 + runStride * 0.05 : isJumping ? 1.15 : isFalling ? 0.92 : 1;
+
+  const scaleX = dynamicSquashX * opts.squashX;
+  const scaleY = dynamicSquashY * opts.squashY;
+
+  // Ground Contact Shadow
+  const shadowW =
+    w * (isJumping ? 0.65 : isFalling ? 0.95 : 0.85 + (isRunning ? runStride * 0.1 : 0));
+  ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
+  ctx.beginPath();
+  ctx.ellipse(x + w / 2, y + h, shadowW / 2, 3, 0, 0, Math.PI * 2);
+  ctx.fill();
 
   const sprite = getSpriteImage(opts.sprite);
+  const drawW = 50;
+  const drawH = 50;
+  const drawX = x + w / 2 - drawW / 2;
+  const drawY = y + h - drawH - (isJumping ? 2 : isFalling ? -1 : 0) - runBob + idleBreathing;
+
+  // Clean, complete sprite rendering (NEVER chopped into rectangles!)
   if (sprite.complete && sprite.naturalWidth > 0) {
-    const isRunning = opts.animation === "sol" || opts.animation === "sag";
-    const walkBob = isRunning ? Math.sin(opts.runClock * 9) * 3.1 : 0;
-    const idleBreathing = opts.animation === "bekle" ? Math.sin(opts.now / 350) * 1.5 : 0;
-    const tilt =
-      opts.animation === "zipla"
-        ? -0.16 * opts.facing
-        : opts.animation === "dus"
-          ? 0.18 * opts.facing
-          : isRunning
-            ? Math.sin(opts.runClock * 9) * 0.085
-            : 0;
-    const scaleX =
-      (opts.animation === "zipla"
-        ? 0.9
-        : opts.animation === "dus"
-          ? 1.12
-          : isRunning
-            ? 1 + Math.sin(opts.runClock * 9) * 0.045
-            : 1) * opts.squashX;
-    const scaleY =
-      (opts.animation === "zipla"
-        ? 1.16
-        : opts.animation === "dus"
-          ? 0.88
-          : isRunning
-            ? 1 - Math.sin(opts.runClock * 9) * 0.03
-            : 1) * opts.squashY;
-    const drawW = 52;
-    const drawH = 52;
-    const drawX = x + w / 2 - drawW / 2;
-    const drawY = y + h - drawH + jumpLift + walkBob + idleBreathing;
-    const totalRotation = tilt + opts.jumpSpin;
-
-    if (isRunning) {
-      drawSpriteGhost(
-        ctx,
-        sprite,
-        drawX - opts.facing * 7,
-        drawY + 1,
-        drawW,
-        drawH,
-        opts.facing,
-        0.18,
-      );
-      drawAnimatedRunSprite(ctx, sprite, drawX, drawY, drawW, drawH, opts.facing, opts.runClock);
-      return;
-    }
-
-    if (opts.animation === "dus") {
-      drawFallStreaks(ctx, drawX, drawY, drawW, drawH, opts.runClock);
-    }
-
     ctx.save();
     ctx.translate(drawX + drawW / 2, drawY + drawH / 2);
     ctx.rotate(totalRotation);
@@ -2893,64 +2834,46 @@ function drawPlayer(
     return;
   }
 
-  // Natural fallback character rendering
-  ctx.fillStyle = `hsl(${(opts.hue + 200) % 360} 40% 28%)`;
-  ctx.fillRect(x, y + py * 4 + jumpLift, w, py * 4.6);
+  // Fallback vector runner
+  const px = w / 8;
+  const py = h / 10;
+  ctx.save();
+  ctx.translate(x + w / 2, y + h / 2 - runBob + idleBreathing);
+  ctx.rotate(totalRotation);
+  ctx.scale(opts.facing < 0 ? -scaleX : scaleX, scaleY);
+
+  // Body
   ctx.fillStyle = `hsl(${opts.hue} 70% 50%)`;
-  ctx.fillRect(x + px * 3, y + py * 4 + jumpLift, px * 2, py * 4);
+  roundRect(ctx, -w / 2 + px, -h / 2 + py * 3, w - px * 2, py * 4.5, 3);
+  ctx.fill();
+
+  // Head
   ctx.fillStyle = "#f5d0b5";
-  ctx.fillRect(x + px, y + jumpLift, px * 6, py * 4);
-  ctx.fillStyle = `hsl(${(opts.hue + 30) % 360} 60% 25%)`;
-  ctx.fillRect(x + px, y + jumpLift, px * 6, py);
-  ctx.fillStyle = "#111827";
-  const eyeX = opts.facing > 0 ? x + px * 4.6 : x + px * 2.5;
-  ctx.fillRect(eyeX, y + py * 1.8 + jumpLift, px * 0.8, py * 0.8);
-  ctx.fillStyle = "#0b0f19";
-  ctx.fillRect(x + px, y + h - py + legSwing, px * 2.4, py);
-  ctx.fillRect(x + w - px * 3.4, y + h - py - legSwing, px * 2.4, py);
-}
+  roundRect(ctx, -px * 2.5, -h / 2, px * 5, py * 3.5, 4);
+  ctx.fill();
 
-function drawSpriteGhost(
-  ctx: CanvasRenderingContext2D,
-  sprite: HTMLImageElement,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  facing: number,
-  alpha: number,
-) {
-  ctx.save();
-  ctx.globalAlpha = alpha;
-  if (facing < 0) {
-    ctx.translate(x + w, y);
-    ctx.scale(-1, 1);
-    ctx.drawImage(sprite, 0, 0, w, h);
-  } else {
-    ctx.drawImage(sprite, x, y, w, h);
-  }
-  ctx.restore();
-}
+  // Visor
+  ctx.fillStyle = "#1e293b";
+  ctx.fillRect(px * 0.5, -h / 2 + py * 1.2, px * 2, py * 1);
 
-function drawFallStreaks(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  clock: number,
-) {
-  ctx.save();
-  ctx.strokeStyle = "rgba(244, 63, 94, 0.4)";
-  ctx.lineWidth = 1.5;
-  for (let i = 0; i < 4; i += 1) {
-    const sx = x + 5 + i * 13 + Math.sin(clock * 8 + i) * 2;
-    const sy = y - 9 - i * 3;
-    ctx.beginPath();
-    ctx.moveTo(sx, sy);
-    ctx.lineTo(sx - 4, sy + h * 0.42);
-    ctx.stroke();
-  }
+  // Legs with real stride angles
+  const legAngle = isRunning ? Math.sin(opts.runClock * 13) * 0.45 : 0;
+  ctx.strokeStyle = `hsl(${(opts.hue + 200) % 360} 40% 28%)`;
+  ctx.lineWidth = 3.5;
+  ctx.lineCap = "round";
+
+  // Left leg
+  ctx.beginPath();
+  ctx.moveTo(-px * 1.5, py * 2);
+  ctx.lineTo(-px * 1.5 + Math.sin(legAngle) * 8, py * 2 + Math.cos(legAngle) * 10);
+  ctx.stroke();
+
+  // Right leg
+  ctx.beginPath();
+  ctx.moveTo(px * 1.5, py * 2);
+  ctx.lineTo(px * 1.5 - Math.sin(legAngle) * 8, py * 2 - Math.cos(legAngle) * 10);
+  ctx.stroke();
+
   ctx.restore();
 }
 
@@ -2973,71 +2896,4 @@ function getTimeframeLayout(timeframeId: TimeframeConfig["id"]) {
     default:
       return { topY: 145, groundY: 470 };
   }
-}
-
-function drawAnimatedRunSprite(
-  ctx: CanvasRenderingContext2D,
-  sprite: HTMLImageElement,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  facing: number,
-  clock: number,
-) {
-  const srcW = sprite.naturalWidth;
-  const srcH = sprite.naturalHeight;
-  const bob = Math.sin(clock * 9) * 1.6;
-  const legA = Math.sin(clock * 9) * 0.42;
-  const legB = -legA;
-  const torsoTilt = facing * 0.06;
-
-  const torso = {
-    sx: 0,
-    sy: 0,
-    sw: srcW,
-    sh: Math.floor(srcH * 0.66),
-  };
-  const leftLeg = {
-    sx: Math.floor(srcW * 0.2),
-    sy: Math.floor(srcH * 0.58),
-    sw: Math.floor(srcW * 0.24),
-    sh: Math.floor(srcH * 0.42),
-  };
-  const rightLeg = {
-    sx: Math.floor(srcW * 0.52),
-    sy: Math.floor(srcH * 0.58),
-    sw: Math.floor(srcW * 0.24),
-    sh: Math.floor(srcH * 0.42),
-  };
-
-  ctx.save();
-  ctx.translate(x + w / 2, y + h / 2 + bob);
-  if (facing < 0) ctx.scale(-1, 1);
-
-  drawSpriteLimb(ctx, sprite, leftLeg, -w * 0.12, h * 0.1, w * 0.18, h * 0.4, legA);
-  drawSpriteLimb(ctx, sprite, rightLeg, w * 0.1, h * 0.1, w * 0.18, h * 0.4, legB);
-
-  ctx.save();
-  ctx.rotate(torsoTilt);
-  ctx.drawImage(sprite, torso.sx, torso.sy, torso.sw, torso.sh, -w / 2, -h / 2, w, h * 0.66);
-  ctx.restore();
-  ctx.restore();
-}
-
-function drawSpriteLimb(
-  ctx: CanvasRenderingContext2D,
-  sprite: HTMLImageElement,
-  source: { sx: number; sy: number; sw: number; sh: number },
-  dx: number,
-  dy: number,
-  dw: number,
-  dh: number,
-  angle: number,
-) {
-  ctx.save();
-  ctx.translate(dx, dy);
-  ctx.rotate(angle);
-  ctx.drawImage(sprite, source.sx, source.sy, source.sw, source.sh, -dw / 2, 0, dw, dh);
-  ctx.restore();
 }
