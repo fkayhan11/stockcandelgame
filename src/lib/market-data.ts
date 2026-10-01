@@ -7,14 +7,17 @@ export type MarketSymbol = {
   vol: number;
 };
 
-export type TimeframeId = "1dk" | "1s" | "1g" | "1ay";
+export type TimeframeId = "1g" | "1h" | "1ay" | "1y";
 
 export type TimeframeConfig = {
   id: TimeframeId;
   label: string;
   shortLabel: string;
+  difficulty: "Kolay" | "Orta" | "Zor" | "Uzman";
+  description: string;
   yahooRange: string;
   yahooInterval: string;
+  binanceInterval: string;
   candleWidth: number;
   gap: number;
   jumpBoost: number;
@@ -26,54 +29,142 @@ export type Candle = {
   h: number;
   l: number;
   c: number;
+  v?: number;
   t: number;
   label: string;
+  changePct: number;
+  patternName: string;
+  patternTip: string;
+  sentiment: "bull" | "bear" | "neutral";
 };
 
+export function detectCandlePattern(
+  o: number,
+  h: number,
+  l: number,
+  c: number,
+): { name: string; tip: string; sentiment: "bull" | "bear" | "neutral" } {
+  const body = Math.abs(c - o);
+  const range = Math.max(0.0001, h - l);
+  const upperWick = h - Math.max(o, c);
+  const lowerWick = Math.min(o, c) - l;
+  const isBull = c >= o;
+  const pct = Number((((c - o) / Math.max(0.0001, o)) * 100).toFixed(1));
+
+  // 1. Doji (Kararsızlık Mumu)
+  if (body / range < 0.12) {
+    return {
+      name: "Doji (Kararsızlık)",
+      tip: "Alıcı ve satıcılar dengede kaldı. Trend yön değiştirebilir.",
+      sentiment: "neutral",
+    };
+  }
+
+  // 2. Çekiç / Asılı Adam (Hammer)
+  if (lowerWick >= body * 1.8 && upperWick <= body * 0.35) {
+    return {
+      name: isBull ? "Boğa Çekici (Hammer)" : "Asılı Adam (Hanging Man)",
+      tip: isBull
+        ? "Diplerden güçlü alım tepkisi geldi. Boğa dönüş sinyali!"
+        : "Tepeden satış baskısı oluşmaya başladı.",
+      sentiment: isBull ? "bull" : "bear",
+    };
+  }
+
+  // 3. Ters Çekiç / Kayan Yıldız (Shooting Star)
+  if (upperWick >= body * 1.8 && lowerWick <= body * 0.35) {
+    return {
+      name: isBull ? "Ters Çekiç (Inverted Hammer)" : "Kayan Yıldız (Shooting Star)",
+      tip: isBull
+        ? "Boğalar yukarıyı test etti, yükseliş ivmesi aranıyor."
+        : "Zirveden sert satış geldi. Ayı dönüş tehlikesi!",
+      sentiment: isBull ? "bull" : "bear",
+    };
+  }
+
+  // 4. Marubozu (Gövde neredeyse tüm mumu kaplar)
+  if (body / range > 0.85) {
+    return {
+      name: isBull ? "Boğa Marubozu (Tam Güç)" : "Ayı Marubozu (Sert Satış)",
+      tip: isBull
+        ? "Açılıştan kapanışa kesintisiz alım dalgası! Tam boğa gücü."
+        : "Açılıştan kapanışa kesintisiz satış baskısı!",
+      sentiment: isBull ? "bull" : "bear",
+    };
+  }
+
+  // 5. Standart Trend Mumu
+  if (isBull) {
+    return {
+      name: `Boğa Mumu (+%${pct})`,
+      tip: "Alıcılar seansı kazandı, fiyat yükseldi.",
+      sentiment: "bull",
+    };
+  } else {
+    return {
+      name: `Ayı Mumu (%${pct})`,
+      tip: "Satıcılar baskın geldi, fiyat geriledi.",
+      sentiment: "bear",
+    };
+  }
+}
+
 export const TIMEFRAMES: TimeframeConfig[] = [
-  {
-    id: "1dk",
-    label: "1 Dakika",
-    shortLabel: "1Dk",
-    yahooRange: "1d",
-    yahooInterval: "1m",
-    candleWidth: 72,
-    gap: 32,
-    jumpBoost: 1.0,
-    volatilityScale: 1.0,
-  },
-  {
-    id: "1s",
-    label: "1 Saat",
-    shortLabel: "1Sa",
-    yahooRange: "5d",
-    yahooInterval: "1h",
-    candleWidth: 80,
-    gap: 36,
-    jumpBoost: 1.0,
-    volatilityScale: 1.0,
-  },
   {
     id: "1g",
     label: "1 Gün",
     shortLabel: "1G",
-    yahooRange: "3mo",
-    yahooInterval: "1d",
-    candleWidth: 88,
-    gap: 38,
+    difficulty: "Kolay",
+    description: "Geniş Mumlar · Düşük Düşme Riski",
+    yahooRange: "1d",
+    yahooInterval: "5m",
+    binanceInterval: "15m",
+    candleWidth: 96,
+    gap: 28,
+    jumpBoost: 1.0,
+    volatilityScale: 0.8,
+  },
+  {
+    id: "1h",
+    label: "1 Hafta",
+    shortLabel: "1H",
+    difficulty: "Orta",
+    description: "Standart Platformlar · Dengeli Hız",
+    yahooRange: "5d",
+    yahooInterval: "30m",
+    binanceInterval: "1h",
+    candleWidth: 68,
+    gap: 32,
     jumpBoost: 1.0,
     volatilityScale: 1.0,
   },
   {
     id: "1ay",
     label: "1 Ay",
-    shortLabel: "1Ay",
-    yahooRange: "5y",
-    yahooInterval: "1mo",
-    candleWidth: 105,
-    gap: 46,
+    shortLabel: "1A",
+    difficulty: "Zor",
+    description: "Dar Mumlar · Yüksek Volatilite",
+    yahooRange: "1mo",
+    yahooInterval: "1d",
+    binanceInterval: "4h",
+    candleWidth: 46,
+    gap: 36,
+    jumpBoost: 1.02,
+    volatilityScale: 1.2,
+  },
+  {
+    id: "1y",
+    label: "1 Yıl",
+    shortLabel: "1Y",
+    difficulty: "Uzman",
+    description: "İncecik Mumlar · Kenardan Düşme Tehlikesi!",
+    yahooRange: "1y",
+    yahooInterval: "1wk",
+    binanceInterval: "1d",
+    candleWidth: 26,
+    gap: 40,
     jumpBoost: 1.05,
-    volatilityScale: 1.0,
+    volatilityScale: 1.4,
   },
 ];
 
@@ -189,21 +280,35 @@ export async function fetchMarketCandles(
   const isCrypto = ["BTC", "ETH", "SOL", "DOGE"].includes(symbol.symbol);
   if (isCrypto) {
     try {
-      const binanceInterval = timeframe.id === "1dk" ? "1m" : timeframe.id === "1s" ? "1h" : "1d";
       const binanceRes = await fetch(
-        `https://api.binance.com/api/v3/klines?symbol=${symbol.symbol}USDT&interval=${binanceInterval}&limit=${count}`,
+        `https://api.binance.com/api/v3/klines?symbol=${symbol.symbol}USDT&interval=${timeframe.binanceInterval}&limit=${count}`,
       );
       if (binanceRes.ok) {
-        const raw = (await binanceRes.json()) as Array<[number, string, string, string, string]>;
+        const raw = (await binanceRes.json()) as Array<[number, string, string, string, string, string]>;
         if (Array.isArray(raw) && raw.length > 10) {
-          const candles: Candle[] = raw.map((k) => ({
-            o: parseFloat(k[1]),
-            h: parseFloat(k[2]),
-            l: parseFloat(k[3]),
-            c: parseFloat(k[4]),
-            t: Math.floor(k[0] / 1000),
-            label: formatCandleTime(Math.floor(k[0] / 1000), timeframe.id),
-          }));
+          const candles: Candle[] = raw.map((k) => {
+            const o = parseFloat(k[1]);
+            const h = parseFloat(k[2]);
+            const l = parseFloat(k[3]);
+            const c = parseFloat(k[4]);
+            const v = parseFloat(k[5]) || 0;
+            const t = Math.floor(k[0] / 1000);
+            const changePct = Number((((c - o) / Math.max(0.0001, o)) * 100).toFixed(2));
+            const pattern = detectCandlePattern(o, h, l, c);
+            return {
+              o,
+              h,
+              l,
+              c,
+              v,
+              t,
+              label: formatCandleTime(t, timeframe.id),
+              changePct,
+              patternName: pattern.name,
+              patternTip: pattern.tip,
+              sentiment: pattern.sentiment,
+            };
+          });
           return { candles, source: "canlı" };
         }
       }
@@ -227,14 +332,28 @@ export async function fetchMarketCandles(
             const h = quote.high?.[i];
             const l = quote.low?.[i];
             const c = quote.close?.[i];
-            if (![o, h, l, c].every((v) => Number.isFinite(v))) return undefined;
+            const v = quote.volume?.[i] ?? 0;
+            if (![o, h, l, c].every((val) => Number.isFinite(val))) return undefined;
+            const openNum = o as number;
+            const highNum = h as number;
+            const lowNum = l as number;
+            const closeNum = c as number;
+            const changePct = Number(
+              (((closeNum - openNum) / Math.max(0.0001, openNum)) * 100).toFixed(2),
+            );
+            const pattern = detectCandlePattern(openNum, highNum, lowNum, closeNum);
             return {
-              o: o as number,
-              h: h as number,
-              l: l as number,
-              c: c as number,
+              o: openNum,
+              h: highNum,
+              l: lowNum,
+              c: closeNum,
+              v: Number(v) || 0,
               t: timestamp,
               label: formatCandleTime(timestamp, timeframe.id),
+              changePct,
+              patternName: pattern.name,
+              patternTip: pattern.tip,
+              sentiment: pattern.sentiment,
             };
           })
           .filter(Boolean)
@@ -305,13 +424,28 @@ function generateRealHistoricalCompanyCandles(
     const l = Math.max(0.2, Math.min(o, c) - lowExtra);
 
     const t = Math.floor((now - (count - i) * stepSeconds * 1000) / 1000);
+    const openNum = Number(o.toFixed(2));
+    const highNum = Number(h.toFixed(2));
+    const lowNum = Number(l.toFixed(2));
+    const closeNum = Number(c.toFixed(2));
+    const volume = Math.floor(10000 + rand() * 85000);
+    const changePct = Number(
+      (((closeNum - openNum) / Math.max(0.0001, openNum)) * 100).toFixed(2),
+    );
+    const pattern = detectCandlePattern(openNum, highNum, lowNum, closeNum);
+
     candles.push({
-      o: Number(o.toFixed(2)),
-      h: Number(h.toFixed(2)),
-      l: Number(l.toFixed(2)),
-      c: Number(c.toFixed(2)),
+      o: openNum,
+      h: highNum,
+      l: lowNum,
+      c: closeNum,
+      v: volume,
       t,
       label: formatCandleTime(t, timeframe.id),
+      changePct,
+      patternName: pattern.name,
+      patternTip: pattern.tip,
+      sentiment: pattern.sentiment,
     });
     currentPrice = c;
   }
@@ -321,16 +455,23 @@ function generateRealHistoricalCompanyCandles(
 
 function formatCandleTime(timestamp: number, timeframe: TimeframeId) {
   const date = new Date(timestamp * 1000);
-  if (timeframe === "1dk" || timeframe === "1s") {
+  if (timeframe === "1g") {
     return new Intl.DateTimeFormat("tr-TR", {
       hour: "2-digit",
       minute: "2-digit",
     }).format(date);
   }
-  if (timeframe === "1g") {
+  if (timeframe === "1h") {
+    return new Intl.DateTimeFormat("tr-TR", {
+      weekday: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(date);
+  }
+  if (timeframe === "1ay") {
     return new Intl.DateTimeFormat("tr-TR", {
       day: "2-digit",
-      month: "2-digit",
+      month: "short",
     }).format(date);
   }
   return new Intl.DateTimeFormat("tr-TR", {
@@ -341,10 +482,10 @@ function formatCandleTime(timestamp: number, timeframe: TimeframeId) {
 
 function secondsForTimeframe(timeframe: TimeframeId) {
   const map: Record<TimeframeId, number> = {
-    "1dk": 60,
-    "1s": 60 * 60,
-    "1g": 60 * 60 * 24,
-    "1ay": 60 * 60 * 24 * 30,
+    "1g": 5 * 60,
+    "1h": 30 * 60,
+    "1ay": 24 * 60 * 60,
+    "1y": 7 * 24 * 60 * 60,
   };
   return map[timeframe];
 }

@@ -240,14 +240,47 @@ function Home() {
           </div>
         </div>
 
+        {/* Timeframe & Mechanic Showcase */}
+        <div className="glass-low rounded-2xl p-3.5 border border-white/[0.08] shadow-md">
+          <div className="flex items-center justify-between pb-2 border-b border-white/6">
+            <span className="font-mono text-[10px] font-bold tracking-wider text-slate-300 uppercase">
+              MUM DİLİMLERİ & ZORLUK SEVİYELERİ
+            </span>
+            <span className="font-mono text-[10px] text-emerald-400 font-semibold">
+              ÖĞREN & KAZAN
+            </span>
+          </div>
+          <div className="mt-2.5 grid grid-cols-2 gap-2 font-mono text-[11px]">
+            <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/25 p-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-emerald-400">1G · 1 Günlük</span>
+                <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-500/20 text-emerald-300">Kolay</span>
+              </div>
+              <p className="mt-1 text-[10px] text-slate-400 leading-tight">
+                Geniş kalın mumlar, sağlam basamaklar, düşük düşme riski.
+              </p>
+            </div>
+            <div className="rounded-xl bg-rose-500/10 border border-rose-500/25 p-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-rose-400">1Y · 1 Yıllık</span>
+                <span className="text-[9px] px-1 py-0.2 rounded bg-rose-500/20 text-rose-300">Uzman</span>
+              </div>
+              <p className="mt-1 text-[10px] text-slate-400 leading-tight">
+                İncecik mumlar, hassas atlama, kenardan düşme tehlikesi!
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* Live Ticker Teaser */}
         <div className="glass-low flex items-center justify-between rounded-xl px-3.5 py-2 font-mono text-[11px] border border-white/6 text-muted-foreground">
           <div className="flex items-center gap-3">
             <span className="text-emerald-400 font-bold">THYAO +3.4%</span>
             <span className="text-emerald-400 font-bold">BTC +5.2%</span>
             <span className="text-emerald-400 font-bold">GARAN +2.1%</span>
+            <span className="text-emerald-400 font-bold">NVDA +4.1%</span>
           </div>
-          <span className="text-[10px] text-slate-500 font-semibold">BİST & KRİPTO</span>
+          <span className="text-[10px] text-slate-500 font-semibold">CANLI OHLC</span>
         </div>
 
         {/* Legal & Privacy Compliance */}

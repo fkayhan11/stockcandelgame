@@ -52,6 +52,13 @@ type Platform = {
   bull: boolean;
   type: PlatformType;
   price: number;
+  open: number;
+  high: number;
+  low: number;
+  volume: number;
+  changePct: number;
+  patternName: string;
+  patternTip: string;
   label: string;
   wickTop: number;
   wickBottom: number;
@@ -87,15 +94,7 @@ type Particle = {
   color: string;
 };
 
-type CityBuilding = {
-  x: number;
-  w: number;
-  h: number;
-  windows: { x: number; y: number; on: boolean }[];
-  billboard?: string;
-};
-
-const DEFAULT_TIMEFRAME = TIMEFRAMES.find((t) => t.id === "1dk") ?? TIMEFRAMES[0];
+const DEFAULT_TIMEFRAME = TIMEFRAMES[0];
 const TRADE_SYMBOLS = TOP_VOLUME_SYMBOLS;
 
 export function GameCanvas() {
@@ -132,6 +131,17 @@ export function GameCanvas() {
     feverCharge: 0,
     feverSeconds: 0,
     perfectLandings: 0,
+    activeCandle: null as {
+      price: number;
+      open: number;
+      high: number;
+      low: number;
+      volume: number;
+      changePct: number;
+      patternName: string;
+      patternTip: string;
+      label: string;
+    } | null,
   });
 
   const selectedCharId = useGameStore((s) => s.selectedCharacter);
@@ -171,13 +181,27 @@ export function GameCanvas() {
     jumpBufferTimer: 0,
     screenShake: 0,
     ambientDust: [] as { x: number; y: number; speed: number; size: number; alpha: number }[],
-    cityBuildings: [] as CityBuilding[],
+    minPrice: 0,
+    maxPrice: 0,
+    groundY: 460,
+    topY: 150,
+    activeCandle: null as {
+      price: number;
+      open: number;
+      high: number;
+      low: number;
+      volume: number;
+      changePct: number;
+      patternName: string;
+      patternTip: string;
+      label: string;
+    } | null,
     player: {
       x: 80,
       y: 0,
       vx: 0,
       vy: 0,
-      w: 26,
+      w: 24,
       h: 32,
       onGround: false,
       facing: 1,
@@ -335,6 +359,15 @@ export function GameCanvas() {
     const layout = getTimeframeLayout(tf.id);
     const groundY = layout.groundY;
     const topY = layout.topY;
+    state.minPrice = minPrice;
+    state.maxPrice = maxPrice;
+    state.groundY = groundY;
+    state.topY = topY;
+
+    // Adapt player collision hitbox to candle width
+    const playerW = tf.id === "1y" ? 18 : tf.id === "1ay" ? 22 : 24;
+    state.player.w = playerW;
+
     const priceToY = (price: number) => groundY - ((price - minPrice) / range) * (groundY - topY);
     const platforms: Platform[] = [];
     const collectibles: Collectible[] = [];
@@ -360,12 +393,18 @@ export function GameCanvas() {
 
       const bodyTop = Math.max(140, Math.min(420, currentY));
       const rawH = Math.abs(priceToY(candle.o) - priceToY(candle.c));
-      const h = Math.max(38, Math.min(100, rawH * 0.6 + 28));
+      const h = Math.max(34, Math.min(100, rawH * 0.6 + 28));
       const wickTop = bodyTop - Math.min(42, Math.abs(priceToY(candle.h) - rawTargetY) * 0.4 + 16);
       const wickBottom =
         bodyTop + h + Math.min(42, Math.abs(priceToY(candle.l) - rawTargetY) * 0.4 + 16);
-      let w = Math.max(72, tf.candleWidth * (0.95 + deterministicWave(i, 0.12)));
-      const gap = Math.max(28, Math.min(48, tf.gap * (0.9 + deterministicWave(i + 11, 0.18))));
+
+      // True variable candle width scaled strictly per timeframe:
+      // 1G: ~96px (broad, forgiving, low fall risk)
+      // 1H: ~68px (balanced)
+      // 1A: ~46px (narrow)
+      // 1Y: ~26px (razor-thin, precise jumps, high risk of falling off edges!)
+      let w = Math.max(22, Math.min(120, tf.candleWidth * (0.96 + deterministicWave(i, 0.08))));
+      const gap = Math.max(22, Math.min(48, tf.gap * (0.94 + deterministicWave(i + 11, 0.12))));
 
       let type: PlatformType = "normal";
       const isFinish = i === finishIndex;
@@ -396,6 +435,13 @@ export function GameCanvas() {
         bull: isFinish ? true : bull,
         type,
         price: candle.c,
+        open: candle.o,
+        high: candle.h,
+        low: candle.l,
+        volume: candle.v || 25000,
+        changePct: candle.changePct ?? Number((((candle.c - candle.o) / Math.max(0.001, candle.o)) * 100).toFixed(2)),
+        patternName: candle.patternName ?? (bull ? "Boğa Mumu" : "Ayı Mumu"),
+        patternTip: candle.patternTip ?? (bull ? "Alıcılar seansı kazandı." : "Satıcılar baskın geldi."),
         label: isFinish ? "BİTİŞ ÇİZGİSİ" : candle.label,
         wickTop,
         wickBottom,
@@ -474,7 +520,7 @@ export function GameCanvas() {
     const first = platforms[0];
     state.platforms = platforms;
     state.collectibles = collectibles;
-    state.player.x = first.x + 20;
+    state.player.x = first.x + Math.max(2, Math.min(first.w / 2 - state.player.w / 2, 20));
     state.player.y = first.y - state.player.h;
     state.player.vx = 0;
     state.player.vy = 0;
@@ -509,42 +555,33 @@ export function GameCanvas() {
     state.startAt = 0;
     state.elapsedMs = 0;
     state.jumpPower = -560 * tf.jumpBoost;
+    state.activeCandle = {
+      price: first.price,
+      open: first.open,
+      high: first.high,
+      low: first.low,
+      volume: first.volume,
+      changePct: first.changePct,
+      patternName: first.patternName,
+      patternTip: first.patternTip,
+      label: first.label,
+    };
     setIsPaused(false);
 
-    // Far Cyberpunk City Skyline
-    const billboards = ["$BTC 100K", "BULLS ONLY", "BUY THE DIP", "ETH ▲", "MOONSHOT", "HODL"];
-    state.cityBuildings = Array.from({ length: 32 }, (_, i) => {
-      const w = 48 + ((i * 37) % 45);
-      const h = 110 + ((i * 53) % 190);
-      const windows: { x: number; y: number; on: boolean }[] = [];
-      for (let wx = 8; wx < w - 8; wx += 10) {
-        for (let wy = 12; wy < h - 16; wy += 14) {
-          windows.push({ x: wx, y: wy, on: (i + wx + wy) % 3 !== 0 });
-        }
-      }
-      return {
-        x: i * 75,
-        w,
-        h,
-        windows,
-        billboard: i % 4 === 1 ? billboards[(i >> 2) % billboards.length] : undefined,
-      };
-    });
-
     // Ambient floating market embers/dust
-    state.ambientDust = Array.from({ length: 32 }, (_, i) => ({
-      x: i * 75 + Math.random() * 40,
+    state.ambientDust = Array.from({ length: 28 }, (_, i) => ({
+      x: i * 85 + Math.random() * 40,
       y: 40 + Math.random() * 380,
-      speed: 12 + Math.random() * 18,
-      size: 1.5 + Math.random() * 2,
-      alpha: 0.18 + Math.random() * 0.35,
+      speed: 10 + Math.random() * 15,
+      size: 1.5 + Math.random() * 1.5,
+      alpha: 0.15 + Math.random() * 0.25,
     }));
 
-    // Ambient background volume bars for depth
+    // Ambient background volume profile
     state.bgBars = Array.from({ length: 42 }, (_, i) => ({
       x: i * 70,
-      h: 30 + ((i * 37) % 110),
-      w: 36,
+      h: 24 + ((i * 37) % 90),
+      w: 32,
     }));
 
     setHud({
@@ -565,6 +602,7 @@ export function GameCanvas() {
       feverCharge: 0,
       feverSeconds: 0,
       perfectLandings: 0,
+      activeCandle: state.activeCandle,
     });
   };
 
@@ -813,8 +851,10 @@ export function GameCanvas() {
       if (Math.abs(platform.x - player.x) > 160) continue;
       const py = platform.y + platform.sinkOffset;
 
-      // Platform foot check with ledge forgiveness margin (6px)
-      const onPlatform = footCenter >= platform.x - 6 && footCenter <= platform.x + platform.w + 6;
+      // STRICT PLATFORM BOUNDS CHECK:
+      // Karakterin ayak merkezi kesinlikle mumun genişliği içinde olmalıdır.
+      // Dışarı taştığı anda ayak altı boşalır ve karakter doğrudan aşağı düşer!
+      const onPlatform = footCenter >= platform.x && footCenter <= platform.x + platform.w;
       if (!onPlatform) continue;
 
       const crossedTop = player.vy >= 0 && previousBottom <= py + 14 && currentBottom >= py;
@@ -864,11 +904,38 @@ export function GameCanvas() {
         player.canDoubleJump = true;
         player.jumpSpin = 0;
 
-        // Gentle corner nudge onto candle if on the outer edge
-        if (footCenter < supportPlatform.x + 3) {
-          player.x = Math.min(player.x + 2, supportPlatform.x);
-        } else if (footCenter > supportPlatform.x + supportPlatform.w - 3) {
-          player.x = Math.max(player.x - 2, supportPlatform.x + supportPlatform.w - player.w);
+        // Dynamic Active Candle for Learning
+        state.activeCandle = {
+          price: supportPlatform.price,
+          open: supportPlatform.open,
+          high: supportPlatform.high,
+          low: supportPlatform.low,
+          volume: supportPlatform.volume,
+          changePct: supportPlatform.changePct,
+          patternName: supportPlatform.patternName,
+          patternTip: supportPlatform.patternTip,
+          label: supportPlatform.label,
+        };
+
+        // EDGE SLIP MECHANICS:
+        // Mumun kenar ucuna basıldığında (sol veya sağ dış çeper), karakter dışarı doğru kaymaya başlar.
+        // İnce mumlarda (1Y) platform çok dar (26px) olduğu için kenara basan anında kayıp aşağı düşer!
+        if (!supportPlatform.isFinish) {
+          const leftLip = footCenter - supportPlatform.x;
+          const rightLip = supportPlatform.x + supportPlatform.w - footCenter;
+          const slipThreshold = Math.min(5, supportPlatform.w * 0.18);
+
+          if (leftLip < slipThreshold) {
+            player.vx = Math.min(player.vx, -90);
+            if (Math.random() < 0.3) {
+              spawnBurst(state.particles, supportPlatform.x, supportPlatform.y, 1, "#64748b", 0.4);
+            }
+          } else if (rightLip < slipThreshold) {
+            player.vx = Math.max(player.vx, 90);
+            if (Math.random() < 0.3) {
+              spawnBurst(state.particles, supportPlatform.x + supportPlatform.w, supportPlatform.y, 1, "#64748b", 0.4);
+            }
+          }
         }
       }
 
@@ -1346,57 +1413,30 @@ export function GameCanvas() {
     const shakeX = shakeMagnitude > 0 ? (Math.random() - 0.5) * shakeMagnitude : 0;
     const shakeY = shakeMagnitude > 0 ? (Math.random() - 0.5) * shakeMagnitude : 0;
 
-    // --- Far Cyberpunk City Skyline (Parallax Layer 1 with Viewport Culling) ---
+    // --- Elegant Watermark Ticker in Center Background ---
     ctx.save();
-    const skylineParallax = -(state.cameraX * 0.08);
-    const baseX = skylineParallax % 800;
-    ctx.translate(shakeX * 0.2, shakeY * 0.2);
-
-    for (let loop = -1; loop <= 1; loop++) {
-      const offsetX = loop * 800 + baseX;
-      if (offsetX + 800 < 0 || offsetX > width) continue;
-
-      state.cityBuildings.forEach((b) => {
-        const bx = offsetX + b.x;
-        if (bx + b.w < -20 || bx > width + 20) return;
-        const by = height - b.h;
-
-        // Skyscraper body
-        ctx.fillStyle = "rgba(15, 23, 42, 0.75)";
-        ctx.fillRect(bx, by, b.w, b.h);
-        ctx.strokeStyle = "rgba(71, 85, 105, 0.25)";
-        ctx.lineWidth = 1;
-        ctx.strokeRect(bx, by, b.w, b.h);
-
-        // Windows
-        b.windows.forEach((w) => {
-          if (w.on) {
-            ctx.fillStyle =
-              (b.x + w.x) % 2 === 0 ? "rgba(245, 158, 11, 0.24)" : "rgba(56, 189, 248, 0.22)";
-            ctx.fillRect(bx + w.x, by + w.y, 4, 6);
-          }
-        });
-
-        // Rooftop antenna beacon
-        const beaconOn = Math.sin(now / 180 + b.x) > 0;
-        ctx.fillStyle = beaconOn ? "rgba(244, 63, 94, 0.9)" : "rgba(244, 63, 94, 0.25)";
-        ctx.fillRect(bx + b.w / 2 - 1, by - 6, 2, 6);
-
-        // Billboard
-        if (b.billboard) {
-          ctx.fillStyle = "rgba(16, 185, 129, 0.85)";
-          ctx.font = "bold 8px JetBrains Mono, monospace";
-          ctx.fillText(b.billboard, bx + 3, by + 16);
-        }
-      });
-    }
+    ctx.fillStyle = "rgba(255, 255, 255, 0.028)";
+    ctx.font = "900 100px Inter, system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(TRADE_SYMBOLS[tickerIdx].symbol, width / 2, height / 2 - 15);
     ctx.restore();
 
     ctx.save();
     ctx.translate(-state.cameraX + shakeX, shakeY);
 
+    // --- Real Volume Histogram Profile (Layer 1) ---
+    state.platforms.forEach((platform) => {
+      if (platform.cracked || platform.isFinish) return;
+      if (platform.x + platform.w < minVisibleX || platform.x > maxVisibleX) return;
+      const volNorm = Math.min(65, Math.max(12, (platform.volume / 85000) * 58));
+      const volY = height - volNorm - 10;
+      ctx.fillStyle = platform.bull ? "rgba(16, 185, 129, 0.16)" : "rgba(244, 63, 94, 0.16)";
+      roundRect(ctx, platform.x, volY, platform.w, volNorm, 2);
+      ctx.fill();
+    });
+
     // --- Flowing Exponential Moving Average (EMA) Lines (Layer 2) ---
-    // Rendered with crisp dual-pass strokes for zero GPU lag (no software shadowBlur)
     const screenStart = Math.max(0, state.cameraX - 80);
     const screenEnd = state.cameraX + width + 80;
 
@@ -1408,11 +1448,9 @@ export function GameCanvas() {
       if (wx === screenStart) ctx.moveTo(wx, wy);
       else ctx.lineTo(wx, wy);
     }
-    // Soft under-stroke for depth
     ctx.strokeStyle = "rgba(56, 189, 248, 0.12)";
     ctx.lineWidth = 3.5;
     ctx.stroke();
-    // Crisp main line
     ctx.strokeStyle = "rgba(56, 189, 248, 0.65)";
     ctx.lineWidth = 1.5;
     ctx.stroke();
@@ -1555,7 +1593,7 @@ export function GameCanvas() {
         : isBull
           ? "rgba(16, 185, 129, 0.85)"
           : "rgba(244, 63, 94, 0.85)";
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 1.5;
       ctx.lineCap = "round";
       ctx.beginPath();
       ctx.moveTo(platform.x + platform.w / 2, platform.wickTop + platform.sinkOffset);
@@ -1569,7 +1607,7 @@ export function GameCanvas() {
         ctx.arc(
           platform.x + platform.w / 2,
           platform.wickTop + platform.sinkOffset,
-          2.2,
+          2.0,
           0,
           Math.PI * 2,
         );
@@ -1577,45 +1615,47 @@ export function GameCanvas() {
       }
 
       // Soft natural candle shadow
-      ctx.fillStyle = "rgba(0, 0, 0, 0.28)";
-      roundRect(ctx, platform.x + 2, y + 3, platform.w, platform.h, 4);
+      ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
+      roundRect(ctx, platform.x + 2, y + 3, platform.w, platform.h, 3);
       ctx.fill();
 
-      // Candlestick body with crisp TradingView colors (0 GPU gradient allocations)
+      // Candlestick body with crisp TradingView colors
       ctx.fillStyle = isSpring ? "#d97706" : isBull ? "#059669" : "#be123c";
-      roundRect(ctx, platform.x, y, platform.w, platform.h, 4);
+      roundRect(ctx, platform.x, y, platform.w, platform.h, 3);
       ctx.fill();
 
       // Top specular highlight edge
       ctx.fillStyle = isSpring ? "#fef08a" : isBull ? "#34d399" : "#fb7185";
-      ctx.fillRect(platform.x + 2, y, platform.w - 4, 2);
+      ctx.fillRect(platform.x + 1.5, y, platform.w - 3, 2);
 
-      // Specialized Candle Type Overlays
-      if (isSpring) {
-        ctx.fillStyle = "#ffffff";
-        ctx.font = "bold 10px JetBrains Mono, monospace";
-        ctx.textAlign = "center";
-        ctx.fillText("▲▲ SHORT SQUEEZE", platform.x + platform.w / 2, y + platform.h / 2 + 3.5);
-        ctx.textAlign = "left";
-      } else if (isVolatile) {
-        ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
-        ctx.font = "bold 9px JetBrains Mono, monospace";
-        ctx.textAlign = "center";
-        ctx.fillText("⚡ VOLATİL", platform.x + platform.w / 2, y + platform.h / 2 + 3);
-        ctx.textAlign = "left";
-      } else if (isFragile) {
-        ctx.fillStyle = "rgba(255, 255, 255, 0.92)";
-        ctx.font = "bold 9px JetBrains Mono, monospace";
-        ctx.textAlign = "center";
-        ctx.fillText(
-          platform.crackTimer > 0 ? "⚠️ ÇÖKÜYOR!" : "💥 KIRILGAN",
-          platform.x + platform.w / 2,
-          y + platform.h / 2 + 3,
-        );
-        ctx.textAlign = "left";
+      // Specialized Candle Type Overlays (only if wide enough to comfortably fit text)
+      if (platform.w >= 56) {
+        if (isSpring) {
+          ctx.fillStyle = "#ffffff";
+          ctx.font = "bold 9px JetBrains Mono, monospace";
+          ctx.textAlign = "center";
+          ctx.fillText("▲ SQUEEZE", platform.x + platform.w / 2, y + platform.h / 2 + 3.5);
+          ctx.textAlign = "left";
+        } else if (isVolatile) {
+          ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+          ctx.font = "bold 8px JetBrains Mono, monospace";
+          ctx.textAlign = "center";
+          ctx.fillText("⚡ VOLATİL", platform.x + platform.w / 2, y + platform.h / 2 + 3);
+          ctx.textAlign = "left";
+        } else if (isFragile) {
+          ctx.fillStyle = "rgba(255, 255, 255, 0.92)";
+          ctx.font = "bold 8px JetBrains Mono, monospace";
+          ctx.textAlign = "center";
+          ctx.fillText(
+            platform.crackTimer > 0 ? "⚠️ ÇÖKÜYOR" : "💥 KIRILGAN",
+            platform.x + platform.w / 2,
+            y + platform.h / 2 + 3,
+          );
+          ctx.textAlign = "left";
+        }
       }
 
-      // Crisp 1px top specular edge highlight
+      // Crisp top specular edge highlight
       ctx.strokeStyle = isSpring
         ? "rgba(255, 255, 255, 0.55)"
         : isBull
@@ -1623,20 +1663,20 @@ export function GameCanvas() {
           : "rgba(255, 255, 255, 0.22)";
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(platform.x + 3, y + 1);
-      ctx.lineTo(platform.x + platform.w - 3, y + 1);
+      ctx.moveTo(platform.x + 2, y + 1);
+      ctx.lineTo(platform.x + platform.w - 2, y + 1);
       ctx.stroke();
     });
 
-    // Price tags under candles (Viewport Culled)
-    ctx.font = "600 10px JetBrains Mono, monospace";
+    // Price and date tags under candles (Viewport Culled)
+    ctx.font = "600 9px JetBrains Mono, monospace";
     state.platforms.forEach((platform, i) => {
-      if (platform.cracked || i % 6 !== 0) return;
+      if (platform.cracked || i % (platform.w < 40 ? 8 : 5) !== 0) return;
       if (platform.x + platform.w < minVisibleX || platform.x > maxVisibleX) return;
-      ctx.fillStyle = "rgba(148, 163, 184, 0.75)";
-      ctx.fillText(platform.label, platform.x, platform.y + platform.h + 24);
-      ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
-      ctx.fillText(`$${platform.price.toFixed(2)}`, platform.x, platform.y + platform.h + 38);
+      ctx.fillStyle = "rgba(148, 163, 184, 0.7)";
+      ctx.fillText(platform.label, platform.x, platform.y + platform.h + 20);
+      ctx.fillStyle = "rgba(255, 255, 255, 0.35)";
+      ctx.fillText(`$${platform.price.toFixed(2)}`, platform.x, platform.y + platform.h + 32);
     });
 
     // Collectibles & Power-ups (Viewport Culled)
@@ -1737,12 +1777,73 @@ export function GameCanvas() {
 
     ctx.restore();
 
+    // --- TradingView Right-Axis Live Price Ruler (Screen Space Overlay) ---
+    ctx.save();
+    const axisWidth = 56;
+    const axisX = width - axisWidth;
+    ctx.fillStyle = "rgba(9, 13, 22, 0.88)";
+    ctx.fillRect(axisX, 0, axisWidth, height);
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(axisX, 0);
+    ctx.lineTo(axisX, height);
+    ctx.stroke();
+
+    // 5 Horizontal Price Guideline markers across chart
+    const numPriceSteps = 4;
+    for (let pStep = 0; pStep <= numPriceSteps; pStep++) {
+      const stepRatio = pStep / numPriceSteps;
+      const levelY = state.topY + stepRatio * (state.groundY - state.topY);
+      const levelPrice = state.maxPrice - stepRatio * (state.maxPrice - state.minPrice);
+
+      // Guideline tick mark
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
+      ctx.beginPath();
+      ctx.moveTo(axisX, levelY);
+      ctx.lineTo(axisX + 4, levelY);
+      ctx.stroke();
+
+      // Price Label
+      ctx.fillStyle = "rgba(148, 163, 184, 0.75)";
+      ctx.font = "600 8.5px JetBrains Mono, monospace";
+      ctx.textAlign = "left";
+      ctx.fillText(`$${levelPrice.toFixed(1)}`, axisX + 7, levelY + 3);
+    }
+
+    // Dynamic Live Price Pointer matching Player's Current Elevation
+    const playerPrice = Math.max(
+      state.minPrice,
+      Math.min(
+        state.maxPrice,
+        state.minPrice +
+          ((state.groundY - (player.y + player.h)) / Math.max(1, state.groundY - state.topY)) *
+            (state.maxPrice - state.minPrice),
+      ),
+    );
+    const pointerY = Math.max(16, Math.min(height - 20, player.y + player.h / 2));
+    ctx.fillStyle = player.onGround ? "#10b981" : "#38bdf8";
+    ctx.beginPath();
+    ctx.moveTo(axisX, pointerY);
+    ctx.lineTo(axisX + 6, pointerY - 7);
+    ctx.lineTo(axisX + axisWidth - 2, pointerY - 7);
+    ctx.lineTo(axisX + axisWidth - 2, pointerY + 7);
+    ctx.lineTo(axisX + 6, pointerY + 7);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = "#030712";
+    ctx.font = "bold 8.5px JetBrains Mono, monospace";
+    ctx.textAlign = "left";
+    ctx.fillText(`$${playerPrice.toFixed(1)}`, axisX + 8, pointerY + 3);
+    ctx.restore();
+
     // Data source indicator
     drawHintBox(
       ctx,
-      14,
-      14,
-      `VERİ: ${dataSourceRef.current === "canlı" ? "CANLI PİYASA" : "SİMÜLASYON"}`,
+      12,
+      12,
+      `${dataSourceRef.current === "canlı" ? "CANLI PİYASA" : "TARİHİ SİMÜLASYON"} · ${TRADE_SYMBOLS[tickerIdx].symbol}`,
       "#10b981",
     );
   };
@@ -1808,7 +1909,7 @@ export function GameCanvas() {
   return (
     <div className="relative flex h-full w-full flex-col px-3 pt-2 pb-3">
       {/* Sleek Native Top HUD Header */}
-      <div className="flex items-center justify-between gap-1.5 sm:gap-2 pb-2">
+      <div className="flex items-center justify-between gap-1.5 sm:gap-2 pb-1.5">
         {/* Left: Home Exit Button + Hearts + Stock Ticker */}
         <div className="flex items-center gap-1 sm:gap-1.5">
           <Link
@@ -1853,18 +1954,30 @@ export function GameCanvas() {
           </button>
         </div>
 
-        {/* Center: Bull Peak Progress Bar */}
-        <div className="glass-low flex items-center gap-1.5 sm:gap-2 rounded-xl px-2.5 py-1.5 border border-white/8 font-mono text-[11px] shadow-sm">
-          <Flag className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-amber-400 shrink-0" />
-          <div className="relative h-1.5 w-12 sm:w-20 overflow-hidden rounded-full bg-slate-800">
-            <div
-              className="h-full bg-gradient-to-r from-emerald-500 via-teal-400 to-amber-400 transition-all duration-300"
-              style={{
-                width: `${Math.min(100, Math.floor((hud.distance / (hud.finishMeters || 1)) * 100))}%`,
-              }}
-            />
-          </div>
-          <span className="text-white font-bold text-[10px] sm:text-[11px]">{hud.distance}m</span>
+        {/* Center: Direct Timeframe Segmented Selector */}
+        <div className="glass-low flex items-center p-0.5 rounded-xl border border-white/8 shadow-sm">
+          {TIMEFRAMES.map((tf) => {
+            const active = tf.id === timeframe.id;
+            return (
+              <button
+                key={tf.id}
+                onClick={() => {
+                  sound.click();
+                  haptic.light();
+                  setTimeframe(tf);
+                }}
+                className={
+                  "px-2 py-1 rounded-lg font-mono text-[10px] font-extrabold transition-all " +
+                  (active
+                    ? "bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 shadow-sm"
+                    : "text-slate-400 hover:text-white")
+                }
+                title={`${tf.label} (${tf.difficulty}): ${tf.description}`}
+              >
+                {tf.shortLabel}
+              </button>
+            );
+          })}
         </div>
 
         {/* Right: Sound Toggle + Stopwatch + Trophy + Pause */}
@@ -1918,6 +2031,42 @@ export function GameCanvas() {
         </div>
       </div>
 
+      {/* Financial Education & Candlestick Pattern Ribbon */}
+      <div className="glass-low mb-2 flex items-center justify-between rounded-xl px-3 py-1.5 border border-white/8 font-mono text-[11px] shadow-sm">
+        {hud.activeCandle ? (
+          <div className="flex items-center justify-between w-full gap-2">
+            <div className="flex items-center gap-2 truncate">
+              <span className="font-bold text-white">${hud.activeCandle.price.toFixed(2)}</span>
+              <span
+                className={
+                  "font-bold text-[10px] px-1.5 py-0.5 rounded " +
+                  (hud.activeCandle.changePct >= 0
+                    ? "bg-emerald-500/20 text-emerald-400"
+                    : "bg-rose-500/20 text-rose-400")
+                }
+              >
+                {hud.activeCandle.changePct >= 0 ? "+" : ""}{hud.activeCandle.changePct}%
+              </span>
+              <span className="text-[10px] text-slate-400 hidden xs:inline">
+                A:${hud.activeCandle.open.toFixed(1)} Y:${hud.activeCandle.high.toFixed(1)} D:${hud.activeCandle.low.toFixed(1)}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1.5 shrink-0" title={hud.activeCandle.patternTip}>
+              <span className="text-[9px] text-muted-foreground hidden sm:inline">Formasyon:</span>
+              <span className="rounded-md bg-amber-500/20 border border-amber-500/30 px-1.5 py-0.5 text-[10px] font-bold text-amber-300 truncate max-w-[130px] sm:max-w-none">
+                {hud.activeCandle.patternName}
+              </span>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between w-full text-slate-400 text-[10px]">
+            <span>📊 {currentSymbol.symbol} · {currentSymbol.name}</span>
+            <span className="text-emerald-400 font-semibold">{timeframe.label} ({timeframe.difficulty})</span>
+          </div>
+        )}
+      </div>
+
       {/* Canvas Viewport */}
       <div
         ref={containerRef}
@@ -1951,8 +2100,9 @@ export function GameCanvas() {
 
               {/* Timeframe switch during pause */}
               <div className="mt-3">
-                <div className="font-mono text-[10px] uppercase font-semibold text-muted-foreground text-left mb-1.5">
-                  MUM ZAMAN DİLİMİ
+                <div className="font-mono text-[10px] uppercase font-semibold text-muted-foreground text-left mb-1.5 flex justify-between">
+                  <span>MUM ZAMAN DİLİMİ</span>
+                  <span className="text-emerald-400">{timeframe.difficulty}</span>
                 </div>
                 <div className="grid grid-cols-4 gap-1 rounded-xl border border-white/8 bg-slate-900/60 p-1">
                   {TIMEFRAMES.map((tf) => (
@@ -1969,10 +2119,14 @@ export function GameCanvas() {
                           ? "bg-primary text-white shadow-sm"
                           : "text-muted-foreground hover:text-white")
                       }
+                      title={tf.description}
                     >
-                      {tf.label}
+                      {tf.shortLabel}
                     </button>
                   ))}
+                </div>
+                <div className="mt-1 text-[10px] text-muted-foreground font-mono text-left">
+                  {timeframe.description}
                 </div>
               </div>
 
@@ -2826,9 +2980,14 @@ function getSpriteImage(src: string) {
 
 function getTimeframeLayout(timeframeId: TimeframeConfig["id"]) {
   switch (timeframeId) {
+    case "1y":
+      return { topY: 130, groundY: 460 };
     case "1ay":
-      return { topY: 182, groundY: 476 };
+      return { topY: 140, groundY: 465 };
+    case "1h":
+      return { topY: 150, groundY: 470 };
+    case "1g":
     default:
-      return { topY: 145, groundY: 470 };
+      return { topY: 155, groundY: 470 };
   }
 }
