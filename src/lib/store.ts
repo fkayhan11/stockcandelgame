@@ -22,12 +22,14 @@ type State = {
   selectedSkins: Record<string, string>; // characterId -> skinId
   ownedSkins: Record<string, string[]>; // characterId -> [skinIds]
   claimedMissions: string[];
+  discoveredPatterns: string[];
   dailyLeaderboardDate: string;
   dailyPlayerBestMs: number | null;
   dailyLeaderboard: DailySpeedrunRecord[];
   addDollars: (n: number) => void;
   addCoin: (n: number) => void;
   claimMission: (id: string, rewardCoins: number) => boolean;
+  discoverPattern: (patternKey: string) => { isNew: boolean; rewardCoins: number };
   exchange: (dollars: number) => void;
   selectCharacter: (id: string) => void;
   selectSkin: (charId: string, skinId: string) => void;
@@ -97,6 +99,7 @@ export const useGameStore = create<State>()(
       selectedSkins: initialSkins,
       ownedSkins: initialOwned,
       claimedMissions: [],
+      discoveredPatterns: [],
       dailyLeaderboardDate: getTodayDateString(),
       dailyPlayerBestMs: null,
       dailyLeaderboard: generateDailySeed(getTodayDateString()),
@@ -111,6 +114,22 @@ export const useGameStore = create<State>()(
         const safeN = clampSafeInteger(n, 0, 100_000);
         if (safeN <= 0) return;
         set((s) => ({ coin: clampSafeInteger(s.coin + safeN, 0, 1_000_000_000) }));
+      },
+
+      discoverPattern: (patternKey) => {
+        const s = get();
+        if (!patternKey || patternKey === "bull_candle" || patternKey === "bear_candle") {
+          return { isNew: false, rewardCoins: 0 };
+        }
+        if (s.discoveredPatterns.includes(patternKey)) {
+          return { isNew: false, rewardCoins: 0 };
+        }
+        const rewardCoins = 25;
+        set({
+          discoveredPatterns: [...s.discoveredPatterns, patternKey],
+          coin: clampSafeInteger(s.coin + rewardCoins, 0, 1_000_000_000),
+        });
+        return { isNew: true, rewardCoins };
       },
 
       claimMission: (id, rewardCoins) => {

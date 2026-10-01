@@ -57,6 +57,7 @@ type Platform = {
   low: number;
   volume: number;
   changePct: number;
+  patternKey: string;
   patternName: string;
   patternTip: string;
   label: string;
@@ -152,6 +153,7 @@ export function GameCanvas() {
   const recordRun = useGameStore((s) => s.recordRun);
   const recordSpeedrunGlobal = useGameStore((s) => s.recordSpeedrun);
   const getTodayLeaderboardGlobal = useGameStore((s) => s.getTodayLeaderboard);
+  const discoverPatternGlobal = useGameStore((s) => s.discoverPattern);
   const highScore = useGameStore((s) => s.highScore);
   const characterRef = useRef(character);
   const skinIdRef = useRef(selectedSkinId);
@@ -440,6 +442,7 @@ export function GameCanvas() {
         low: candle.l,
         volume: candle.v || 25000,
         changePct: candle.changePct ?? Number((((candle.c - candle.o) / Math.max(0.001, candle.o)) * 100).toFixed(2)),
+        patternKey: candle.patternKey || (bull ? "bull_candle" : "bear_candle"),
         patternName: candle.patternName ?? (bull ? "Boğa Mumu" : "Ayı Mumu"),
         patternTip: candle.patternTip ?? (bull ? "Alıcılar seansı kazandı." : "Satıcılar baskın geldi."),
         label: isFinish ? "BİTİŞ ÇİZGİSİ" : candle.label,
@@ -630,7 +633,7 @@ export function GameCanvas() {
       return;
     }
 
-    // Volatile & Fragile Platforms Update
+    // Volatile, Fragile & Dynamic Spring Platforms Update
     for (const p of state.platforms) {
       if (p.type === "volatile") {
         p.y = p.baseY + Math.sin(now / 380 + p.sinePhase) * 26;
@@ -654,6 +657,11 @@ export function GameCanvas() {
           p.sinkOffset = 9999;
           spawnBurst(state.particles, p.x + p.w / 2, p.y + p.h / 2, 14, "#e11d48", 1.5);
         }
+      } else if (p.type !== "fragile" && p.sinkOffset > 0.05) {
+        // Natural candle spring return on impact
+        p.sinkOffset *= Math.max(0, 1 - 20 * dt);
+      } else if (p.type !== "fragile") {
+        p.sinkOffset = 0;
       }
     }
 
@@ -918,22 +926,25 @@ export function GameCanvas() {
         };
 
         // EDGE SLIP MECHANICS:
-        // Mumun kenar ucuna basıldığında (sol veya sağ dış çeper), karakter dışarı doğru kaymaya başlar.
-        // İnce mumlarda (1Y) platform çok dar (26px) olduğu için kenara basan anında kayıp aşağı düşer!
+        // Mumun kenar ucuna basıldığında (sol veya sağ dış çeper), karakter dışarı doğru kayar.
+        // İnce mumlarda (1Y: 26px platform, 18px oyuncu) kenar payı yalnızca 3.5px'tir!
+        // Oyuncu kenarda bekler veya kayarsa doğrudan yerçekimiyle boşluğa düşer.
         if (!supportPlatform.isFinish) {
           const leftLip = footCenter - supportPlatform.x;
           const rightLip = supportPlatform.x + supportPlatform.w - footCenter;
-          const slipThreshold = Math.min(5, supportPlatform.w * 0.18);
+          const slipThreshold = Math.min(5.5, Math.max(2.8, supportPlatform.w * 0.17));
 
           if (leftLip < slipThreshold) {
-            player.vx = Math.min(player.vx, -90);
-            if (Math.random() < 0.3) {
-              spawnBurst(state.particles, supportPlatform.x, supportPlatform.y, 1, "#64748b", 0.4);
+            player.vx = Math.min(player.vx, -110);
+            player.x -= 24 * dt;
+            if (Math.random() < 0.35) {
+              spawnBurst(state.particles, supportPlatform.x, supportPlatform.y, 1, "#94a3b8", 0.4);
             }
           } else if (rightLip < slipThreshold) {
-            player.vx = Math.max(player.vx, 90);
-            if (Math.random() < 0.3) {
-              spawnBurst(state.particles, supportPlatform.x + supportPlatform.w, supportPlatform.y, 1, "#64748b", 0.4);
+            player.vx = Math.max(player.vx, 110);
+            player.x += 24 * dt;
+            if (Math.random() < 0.35) {
+              spawnBurst(state.particles, supportPlatform.x + supportPlatform.w, supportPlatform.y, 1, "#94a3b8", 0.4);
             }
           }
         }
@@ -942,6 +953,7 @@ export function GameCanvas() {
       if (!wasOnGround) {
         player.squashX = 1.25;
         player.squashY = 0.75;
+        supportPlatform.sinkOffset = 3.6; // Tactile physical compression of candle
         sound.land();
         spawnBurst(
           state.particles,
@@ -951,6 +963,23 @@ export function GameCanvas() {
           supportPlatform.bull ? "#10b981" : "#f43f5e",
           0.75,
         );
+
+        // Pattern Discovery Reward Check
+        if (supportPlatform.patternKey) {
+          const discovery = discoverPatternGlobal(supportPlatform.patternKey);
+          if (discovery.isNew) {
+            sound.gold();
+            haptic.heavy();
+            state.floatingTexts.push({
+              x: player.x - 30,
+              y: player.y - 48,
+              text: `🌟 FORMASYON KEŞFİ: ${supportPlatform.patternName}! (+${discovery.rewardCoins} $COIN)`,
+              life: 2.2,
+              color: "#fbbf24",
+            });
+            spawnBurst(state.particles, footCenter, supportPlatform.y, 14, "#fbbf24", 1.8);
+          }
+        }
 
         // Check Perfect Center Landing
         const platformCenter = supportPlatform.x + supportPlatform.w / 2;
@@ -1775,6 +1804,80 @@ export function GameCanvas() {
       ctx.globalAlpha = 1;
     });
 
+    ctx.restore();
+
+    // --- TradingView RSI (14) Indicator Sub-Panel ---
+    const rsiH = 32;
+    const rsiY = height - rsiH;
+    const rsiW = width - 56;
+    ctx.save();
+    ctx.fillStyle = "rgba(7, 10, 18, 0.88)";
+    ctx.fillRect(0, rsiY, rsiW, rsiH);
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, rsiY);
+    ctx.lineTo(rsiW, rsiY);
+    ctx.stroke();
+
+    // Dotted guidelines: 70 (Overbought - Red) and 30 (Oversold - Green), 50 (Neutral)
+    const y70 = rsiY + rsiH * 0.3;
+    const y30 = rsiY + rsiH * 0.7;
+    const y50 = rsiY + rsiH * 0.5;
+
+    ctx.setLineDash([3, 3]);
+    ctx.strokeStyle = "rgba(244, 63, 94, 0.4)";
+    ctx.beginPath();
+    ctx.moveTo(0, y70);
+    ctx.lineTo(rsiW, y70);
+    ctx.stroke();
+
+    ctx.strokeStyle = "rgba(16, 185, 129, 0.4)";
+    ctx.beginPath();
+    ctx.moveTo(0, y30);
+    ctx.lineTo(rsiW, y30);
+    ctx.stroke();
+
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+    ctx.beginPath();
+    ctx.moveTo(0, y50);
+    ctx.lineTo(rsiW, y50);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Live RSI Oscillator Curve
+    const rsiVal = Math.max(
+      18,
+      Math.min(
+        88,
+        50 + (state.activeCandle?.changePct ?? 0) * 7 + Math.sin(now / 480) * 11,
+      ),
+    );
+    ctx.beginPath();
+    for (let rx = 0; rx < rsiW; rx += 12) {
+      const worldX = state.cameraX + rx;
+      const wave = Math.sin(worldX * 0.015 + now * 0.001) * 7 + Math.cos(worldX * 0.008) * 3;
+      const waveY = y50 - ((rsiVal - 50) / 50) * (rsiH * 0.36) + wave * 0.3;
+      if (rx === 0) ctx.moveTo(rx, waveY);
+      else ctx.lineTo(rx, waveY);
+    }
+    ctx.strokeStyle = rsiVal >= 70 ? "#f43f5e" : rsiVal <= 30 ? "#10b981" : "#a855f7";
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+
+    // RSI Readout & Badges
+    ctx.font = "bold 8.5px JetBrains Mono, monospace";
+    ctx.fillStyle = "rgba(148, 163, 184, 0.9)";
+    ctx.textAlign = "left";
+    ctx.fillText(`RSI 14: ${rsiVal.toFixed(1)}`, 8, rsiY + 11);
+
+    if (rsiVal >= 70) {
+      ctx.fillStyle = "#f43f5e";
+      ctx.fillText("▲ AŞIRI ALIM (OVERBOUGHT)", 82, rsiY + 11);
+    } else if (rsiVal <= 30) {
+      ctx.fillStyle = "#10b981";
+      ctx.fillText("▼ AŞIRI SATIM (OVERSOLD)", 82, rsiY + 11);
+    }
     ctx.restore();
 
     // --- TradingView Right-Axis Live Price Ruler (Screen Space Overlay) ---

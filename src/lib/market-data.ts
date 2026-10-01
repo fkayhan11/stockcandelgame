@@ -33,17 +33,94 @@ export type Candle = {
   t: number;
   label: string;
   changePct: number;
+  patternKey: string;
   patternName: string;
   patternTip: string;
   sentiment: "bull" | "bear" | "neutral";
 };
+
+export type PatternInfo = {
+  key: string;
+  name: string;
+  signal: "Boğa (Yükseliş)" | "Ayı (Düşüş)" | "Nötr (Kararsızlık)";
+  sentiment: "bull" | "bear" | "neutral";
+  tip: string;
+  description: string;
+  advice: string;
+};
+
+export const CANDLE_PATTERNS: PatternInfo[] = [
+  {
+    key: "hammer",
+    name: "Boğa Çekici (Hammer)",
+    signal: "Boğa (Yükseliş)",
+    sentiment: "bull",
+    tip: "Diplerden güçlü alım tepkisi geldi. Boğa dönüş sinyali!",
+    description: "Alt fitili gövdesinin en az 2 katı uzunluğunda olan ve dip seviyelerde alıcıların fiyatı yukarı ittiğini gösteren formasyon.",
+    advice: "Düşüş trendinin sonunda görüldüğünde alış pozisyonu için teyit aranır.",
+  },
+  {
+    key: "shooting_star",
+    name: "Kayan Yıldız (Shooting Star)",
+    signal: "Ayı (Düşüş)",
+    sentiment: "bear",
+    tip: "Zirveden sert satış geldi. Ayı dönüş tehlikesi!",
+    description: "Üst fitili gövdenin en az 2 katı olan ve seans içinde yükselen fiyatın satıcılar tarafından aşağı bastırıldığını gösteren formasyon.",
+    advice: "Yükseliş trendinin tepesinde görüldüğünde kâr realizasyonu veya short sinyali oluşturur.",
+  },
+  {
+    key: "doji",
+    name: "Doji (Kararsızlık Mumu)",
+    signal: "Nötr (Kararsızlık)",
+    sentiment: "neutral",
+    tip: "Alıcı ve satıcılar dengede kaldı. Trend yön değiştirebilir.",
+    description: "Açılış ve kapanış fiyatının neredeyse eşit olduğu, piyasadaki kararsızlığı simgeleyen artı veya haç biçimli mum.",
+    advice: "Tek başına yön vermez; bir sonraki mumun kırılım yönü beklenmelidir.",
+  },
+  {
+    key: "hanging_man",
+    name: "Asılı Adam (Hanging Man)",
+    signal: "Ayı (Düşüş)",
+    sentiment: "bear",
+    tip: "Tepeden satış baskısı oluşmaya başladı.",
+    description: "Biçim olarak çekice benzese de zirvelerde oluşur; gün içi sert satışların başladığına işaret eder.",
+    advice: "Sonraki seansın eksi kapatması teyit olarak kabul edilir.",
+  },
+  {
+    key: "inverted_hammer",
+    name: "Ters Çekiç (Inverted Hammer)",
+    signal: "Boğa (Yükseliş)",
+    sentiment: "bull",
+    tip: "Boğalar yukarıyı test etti, yükseliş ivmesi aranıyor.",
+    description: "Dip seviyelerde uzun üst fitile sahip mum. Alıcıların dirençleri test etmeye başladığını gösterir.",
+    advice: "Ertesi günün yeşil açılışı trend dönüşünü kuvvetlendirir.",
+  },
+  {
+    key: "bull_marubozu",
+    name: "Boğa Marubozu (Tam Güç)",
+    signal: "Boğa (Yükseliş)",
+    sentiment: "bull",
+    tip: "Açılıştan kapanışa kesintisiz alım dalgası! Tam boğa gücü.",
+    description: "Neredeyse hiç fitili olmayan, tamamen yeşil dev gövde. Seans boyunca alıcıların piyasayı tekeline aldığını gösterir.",
+    advice: "Kuvvetli trend devamı sinyalidir, kırılımlarda hacimle desteklenir.",
+  },
+  {
+    key: "bear_marubozu",
+    name: "Ayı Marubozu (Sert Satış)",
+    signal: "Ayı (Düşüş)",
+    sentiment: "bear",
+    tip: "Açılıştan kapanışa kesintisiz satış baskısı!",
+    description: "Neredeyse hiç fitili olmayan, baştan sona kırmızı dev gövde. Satıcıların piyasayı ezici şekilde domine ettiğini gösterir.",
+    advice: "Destek seviyelerinin kırıldığını ve panik satışlarını teyit eder.",
+  },
+];
 
 export function detectCandlePattern(
   o: number,
   h: number,
   l: number,
   c: number,
-): { name: string; tip: string; sentiment: "bull" | "bear" | "neutral" } {
+): { name: string; key: string; tip: string; sentiment: "bull" | "bear" | "neutral" } {
   const body = Math.abs(c - o);
   const range = Math.max(0.0001, h - l);
   const upperWick = h - Math.max(o, c);
@@ -54,6 +131,7 @@ export function detectCandlePattern(
   // 1. Doji (Kararsızlık Mumu)
   if (body / range < 0.12) {
     return {
+      key: "doji",
       name: "Doji (Kararsızlık)",
       tip: "Alıcı ve satıcılar dengede kaldı. Trend yön değiştirebilir.",
       sentiment: "neutral",
@@ -63,6 +141,7 @@ export function detectCandlePattern(
   // 2. Çekiç / Asılı Adam (Hammer)
   if (lowerWick >= body * 1.8 && upperWick <= body * 0.35) {
     return {
+      key: isBull ? "hammer" : "hanging_man",
       name: isBull ? "Boğa Çekici (Hammer)" : "Asılı Adam (Hanging Man)",
       tip: isBull
         ? "Diplerden güçlü alım tepkisi geldi. Boğa dönüş sinyali!"
@@ -74,6 +153,7 @@ export function detectCandlePattern(
   // 3. Ters Çekiç / Kayan Yıldız (Shooting Star)
   if (upperWick >= body * 1.8 && lowerWick <= body * 0.35) {
     return {
+      key: isBull ? "inverted_hammer" : "shooting_star",
       name: isBull ? "Ters Çekiç (Inverted Hammer)" : "Kayan Yıldız (Shooting Star)",
       tip: isBull
         ? "Boğalar yukarıyı test etti, yükseliş ivmesi aranıyor."
@@ -85,6 +165,7 @@ export function detectCandlePattern(
   // 4. Marubozu (Gövde neredeyse tüm mumu kaplar)
   if (body / range > 0.85) {
     return {
+      key: isBull ? "bull_marubozu" : "bear_marubozu",
       name: isBull ? "Boğa Marubozu (Tam Güç)" : "Ayı Marubozu (Sert Satış)",
       tip: isBull
         ? "Açılıştan kapanışa kesintisiz alım dalgası! Tam boğa gücü."
@@ -96,12 +177,14 @@ export function detectCandlePattern(
   // 5. Standart Trend Mumu
   if (isBull) {
     return {
+      key: "bull_candle",
       name: `Boğa Mumu (+%${pct})`,
       tip: "Alıcılar seansı kazandı, fiyat yükseldi.",
       sentiment: "bull",
     };
   } else {
     return {
+      key: "bear_candle",
       name: `Ayı Mumu (%${pct})`,
       tip: "Satıcılar baskın geldi, fiyat geriledi.",
       sentiment: "bear",
@@ -304,6 +387,7 @@ export async function fetchMarketCandles(
               t,
               label: formatCandleTime(t, timeframe.id),
               changePct,
+              patternKey: pattern.key,
               patternName: pattern.name,
               patternTip: pattern.tip,
               sentiment: pattern.sentiment,
@@ -351,6 +435,7 @@ export async function fetchMarketCandles(
               t: timestamp,
               label: formatCandleTime(timestamp, timeframe.id),
               changePct,
+              patternKey: pattern.key,
               patternName: pattern.name,
               patternTip: pattern.tip,
               sentiment: pattern.sentiment,
@@ -443,6 +528,7 @@ function generateRealHistoricalCompanyCandles(
       t,
       label: formatCandleTime(t, timeframe.id),
       changePct,
+      patternKey: pattern.key,
       patternName: pattern.name,
       patternTip: pattern.tip,
       sentiment: pattern.sentiment,

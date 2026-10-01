@@ -3,7 +3,20 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
 import { useGameStore } from "@/lib/store";
 import { CHARACTERS } from "@/lib/game-data";
-import { Trophy, Wallet, Target, Medal, Flame, Timer, Zap, Play } from "lucide-react";
+import { CANDLE_PATTERNS } from "@/lib/market-data";
+import {
+  Trophy,
+  Wallet,
+  Target,
+  Medal,
+  Flame,
+  Timer,
+  Zap,
+  Play,
+  BookOpen,
+  CheckCircle,
+  HelpCircle,
+} from "lucide-react";
 import { PortraitCanvas } from "@/components/PortraitCanvas";
 
 export const Route = createFileRoute("/stats")({
@@ -24,13 +37,14 @@ function formatStopwatch(ms: number) {
 }
 
 function StatsPage() {
-  const [tab, setTab] = useState<"speedrun" | "characters">("speedrun");
+  const [tab, setTab] = useState<"speedrun" | "characters" | "patterns">("speedrun");
   const highScore = useGameStore((s) => s.highScore);
   const totalWealth = useGameStore((s) => s.totalWealth);
   const records = useGameStore((s) => s.characterRecords);
   const coin = useGameStore((s) => s.coin);
   const getTodayLeaderboard = useGameStore((s) => s.getTodayLeaderboard);
   const dailyPlayerBestMs = useGameStore((s) => s.dailyPlayerBestMs);
+  const discoveredPatterns = useGameStore((s) => s.discoveredPatterns || []);
 
   const leaderboard = getTodayLeaderboard();
   const playerRankEntry = leaderboard.find((e) => e.isPlayer);
@@ -90,30 +104,42 @@ function StatsPage() {
         </div>
 
         {/* Segmented Tab Switcher */}
-        <div className="mt-5 grid grid-cols-2 gap-1.5 rounded-2xl border border-white/8 bg-slate-900/60 p-1">
+        <div className="mt-5 grid grid-cols-3 gap-1 rounded-2xl border border-white/8 bg-slate-900/60 p-1">
           <button
             onClick={() => setTab("speedrun")}
             className={
-              "flex items-center justify-center gap-1.5 rounded-xl py-2 font-mono text-xs font-bold transition-all " +
+              "flex items-center justify-center gap-1 rounded-xl py-2 font-mono text-[11px] font-bold transition-all " +
               (tab === "speedrun"
                 ? "bg-primary text-white shadow-sm"
                 : "text-muted-foreground hover:text-white")
             }
           >
             <Timer className="h-3.5 w-3.5" />
-            <span>Günün En Hızlıları</span>
+            <span>En Hızlılar</span>
           </button>
           <button
             onClick={() => setTab("characters")}
             className={
-              "flex items-center justify-center gap-1.5 rounded-xl py-2 font-mono text-xs font-bold transition-all " +
+              "flex items-center justify-center gap-1 rounded-xl py-2 font-mono text-[11px] font-bold transition-all " +
               (tab === "characters"
                 ? "bg-primary text-white shadow-sm"
                 : "text-muted-foreground hover:text-white")
             }
           >
             <Zap className="h-3.5 w-3.5" />
-            <span>Karakter Rekorları</span>
+            <span>Karakterler</span>
+          </button>
+          <button
+            onClick={() => setTab("patterns")}
+            className={
+              "flex items-center justify-center gap-1 rounded-xl py-2 font-mono text-[11px] font-bold transition-all " +
+              (tab === "patterns"
+                ? "bg-primary text-white shadow-sm"
+                : "text-muted-foreground hover:text-white")
+            }
+          >
+            <BookOpen className="h-3.5 w-3.5" />
+            <span>Formasyonlar</span>
           </button>
         </div>
 
@@ -216,6 +242,93 @@ function StatsPage() {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Tab 3: Candlestick Patterns Encyclopedia & Discovery */}
+        {tab === "patterns" && (
+          <div className="mt-4 space-y-3 pb-8">
+            <div className="glass-low flex items-center justify-between rounded-xl p-3 border border-white/6 font-mono text-xs">
+              <span className="text-muted-foreground">TOPLAM KEŞFEDİLEN:</span>
+              <span className="font-bold text-emerald-400">
+                {discoveredPatterns.length} / {CANDLE_PATTERNS.length} Formasyon
+              </span>
+            </div>
+
+            <div className="space-y-2.5">
+              {CANDLE_PATTERNS.map((p) => {
+                const isDiscovered = discoveredPatterns.includes(p.key);
+                return (
+                  <div
+                    key={p.key}
+                    className={
+                      "glass-low rounded-2xl p-4 border transition-all " +
+                      (isDiscovered
+                        ? "border-emerald-500/30 bg-emerald-500/5 shadow-sm"
+                        : "border-white/6 bg-slate-900/30 opacity-80")
+                    }
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className={
+                            "grid h-8 w-8 place-items-center rounded-xl border text-xs font-bold " +
+                            (p.sentiment === "bull"
+                              ? "bg-emerald-500/20 border-emerald-500/30 text-emerald-400"
+                              : p.sentiment === "bear"
+                                ? "bg-rose-500/20 border-rose-500/30 text-rose-400"
+                                : "bg-amber-500/20 border-amber-500/30 text-amber-400")
+                          }
+                        >
+                          {p.sentiment === "bull" ? "▲" : p.sentiment === "bear" ? "▼" : "◆"}
+                        </div>
+                        <div>
+                          <div className="font-display text-sm font-bold text-white flex items-center gap-1.5">
+                            <span>{p.name}</span>
+                            {isDiscovered ? (
+                              <CheckCircle className="h-3.5 w-3.5 text-emerald-400" />
+                            ) : null}
+                          </div>
+                          <div
+                            className={
+                              "font-mono text-[10px] font-bold " +
+                              (p.sentiment === "bull"
+                                ? "text-emerald-400"
+                                : p.sentiment === "bear"
+                                  ? "text-rose-400"
+                                  : "text-amber-400")
+                            }
+                          >
+                            {p.signal}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="font-mono text-[10px]">
+                        {isDiscovered ? (
+                          <span className="rounded-md bg-emerald-500/20 px-2 py-0.5 font-bold text-emerald-300 border border-emerald-500/30">
+                            KEŞFEDİLDİ
+                          </span>
+                        ) : (
+                          <span className="rounded-md bg-slate-800 px-2 py-0.5 text-slate-400 border border-white/5">
+                            PİYASADA BUL
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <p className="mt-2.5 text-xs text-slate-300 leading-relaxed">
+                      {p.description}
+                    </p>
+
+                    <div className="mt-2.5 rounded-xl bg-slate-900/60 p-2.5 border border-white/5 font-mono text-[11px] text-muted-foreground flex items-center gap-2">
+                      <span className="text-amber-400 font-bold">💡 Taktik:</span>
+                      <span className="text-slate-300">{p.advice}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>
