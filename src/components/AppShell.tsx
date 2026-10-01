@@ -44,11 +44,11 @@ export function AppShell({
               </div>
             </div>
             <div>
-              <div className="font-display text-sm font-black tracking-tight text-white">
-                BLOCK JUMPER
+              <div className="font-display text-sm font-black tracking-wider text-white">
+                TRADE TALES TREK
               </div>
-              <div className="font-mono text-[9px] font-semibold text-emerald-400/90 tracking-wider">
-                CANLI MUM RUNNER
+              <div className="font-mono text-[9px] font-bold text-emerald-400 tracking-widest uppercase">
+                INSTITUTIONAL TRADER TERMINAL
               </div>
             </div>
           </div>

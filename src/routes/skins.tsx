@@ -37,9 +37,9 @@ function SkinsPage() {
   return (
     <AppShell>
       <div className="px-5 pt-4">
-        <h1 className="font-display text-2xl font-bold text-white">Kahramanını Seç</h1>
+        <h1 className="font-display text-2xl font-bold text-white">Portföy Yöneticileri</h1>
         <p className="mt-1 font-mono text-xs uppercase tracking-wider text-muted-foreground">
-          Piyasa koşusunda kullanacağın portföy liderini seç
+          Piyasa seansında emir iletecek profesyonel trader masasını seç
         </p>
 
         <div className="mt-5 grid grid-cols-2 gap-3.5 pb-4">

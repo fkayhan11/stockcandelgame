@@ -57,14 +57,14 @@ function generateDailySeed(dateStr: string): DailySpeedrunRecord[] {
   const absHash = Math.abs(hash);
 
   const BOT_RUNNERS = [
-    { runner: "BistBoğası", char: "Gökhan 'Elanus' Varlı", baseMs: 64200 },
-    { runner: "KriptoBalina", char: "Kaan 'Cyber' Kripto", baseMs: 68500 },
-    { runner: "ScalpUstadı", char: "Ali 'Algos' Demir", baseMs: 72900 },
-    { runner: "DeepValue", char: "Selim 'DeFi' Kaya", baseMs: 78400 },
-    { runner: "TrendFollower", char: "Can 'Matrix' Yıldız", baseMs: 83100 },
-    { runner: "HODLKralı", char: "Gökhan 'Elanus' Varlı", baseMs: 88700 },
-    { runner: "AltcoinAvcısı", char: "Kaan 'Cyber' Kripto", baseMs: 94200 },
-    { runner: "MumBükücü", char: "Ali 'Algos' Demir", baseMs: 102500 },
+    { runner: "AlphaQuant", char: "Alexander Vance", baseMs: 64200 },
+    { runner: "VolatilityDesk", char: "Sarah Jennings", baseMs: 68500 },
+    { runner: "GammaScalper", char: "Marcus Chen", baseMs: 72900 },
+    { runner: "DeepValueFund", char: "Victoria Stone", baseMs: 78400 },
+    { runner: "MacroArbitrage", char: "William Sterling", baseMs: 83100 },
+    { runner: "ApexHedge", char: "Elena Rostova", baseMs: 88700 },
+    { runner: "PrestigeCapital", char: "Julian Dupont", baseMs: 94200 },
+    { runner: "SovereignDesk", char: "Lawrence Vane", baseMs: 102500 },
   ];
 
   return BOT_RUNNERS.map((bot, index) => {
